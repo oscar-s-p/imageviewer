@@ -1,0 +1,960 @@
+'''
+Image viewer class
+'''
+
+import os, sys, glob
+from pathlib import Path
+import datetime as dt
+import numpy as np
+import pandas as pd
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredDirectionArrows
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from math import ceil
+
+from astropy.io import fits
+from astropy import units as u
+from astropy.wcs import WCS
+# from astropy.wcs.wcsapi import SlicedLowLevelWCS
+from astropy.wcs.utils import skycoord_to_pixel
+from astropy.visualization import SimpleNorm, simple_norm
+from astropy.visualization import make_lupton_rgb
+from astropy.visualization.wcsaxes import add_scalebar
+from astropy.visualization.wcsaxes import SphericalCircle
+from astropy.coordinates import Angle
+from astropy.coordinates import SkyCoord
+from astropy.coordinates import get_body, EarthLocation
+from astropy.nddata import Cutout2D
+from astropy.time import Time
+from astropy.nddata import NDData
+
+from reproject.mosaicking import find_optimal_celestial_wcs
+from reproject import reproject_interp
+
+
+
+
+class image_viewer:
+    def __init__(self, directory: str = '',
+               list_available = False,
+               folder_list = [],
+               previous_df = False,
+               print_error = True):
+        """Class to quickly open FITS images. Searches in given directory.
+        
+        Attributes
+        ---------
+        directory : str
+            Directory where images are stored. If none given look in current working directory.
+
+        list_available : bool : False
+            Wether to print the resulting dataframe of found images or not
+
+        folder_list : optional, list of str
+            Extra directories to inspect for images and save their folder path from working directory
+        
+        previous_df : optional, pd.DataFrame or str
+            Previous df with files to be added to the new one of the files found in ``folder_list``
+
+        print_error: bool, optional
+            If False, no error warnings will be printed (good for reading large datasets)
+        
+        Methods
+        --------
+        return_index()
+            Returns the image path and index in the datafile given one or the other.
+        
+        header_info()
+            Method to view general header info.
+
+        view()
+            Method to view images.
+        
+        view_multiple()
+            Method to view multiple images in subplots of a figure
+        """
+        self.im_type_dir = {'LB': 
+                                {'data_i' : 0,
+                                'header_i' : 0,
+                                'header_WCS' : 0},
+                            'HST':
+                                {'data_i' : 1,
+                                'header_i' : 0,
+                                'header_WCS' : 1,
+                                'detector' : 
+                                    {'UVIS' : 
+                                        {'SCALE' : 0.04},
+                                    'IR' : 
+                                        {'SCALE' : 0.13}}},
+                            'Keck II':
+                                {'data_i' : 0,
+                                 'header_i' : 0,
+                                 'header_WCS' : 0,
+                                 'detector' : 
+                                    {'Aladdin 3'}}
+                                }
+        
+        self.folder_list = folder_list
+        print('Current working directory: ' + os.getcwd())
+        if directory=='':
+            directory = os.getcwd()
+        if directory != os.getcwd():
+            self.dir_img = os.path.join(os.getcwd(),directory)
+        else: self.dir_img = directory
+        print('Image directory defined: ' + self.dir_img)
+
+        # list of images in dir_img and where were they
+        files = list(Path(self.dir_img).glob('*.fits'))
+        folder_found = ['']*len(files)
+        # list of images in the different folders of folder_list and the corresponding folder
+        if folder_list!= []:
+            for fl in folder_list:
+                fi = list(Path(os.path.join(self.dir_img, fl)).glob('*.fits'))
+                files=files+fi
+                folder_found =folder_found+[fl]*len(fi)
+
+        files_data = []
+        # creation of data dictionary
+        # idea maybe future: read more info from headers: coordinates...
+        for k, f in enumerate(files):
+            try:
+                name = f.name
+                path = str(f.resolve())
+                im_type = 'LB'
+                try: # reading files from TTT
+                    telescope, camera, date_time, object, filter = name.split('_')
+                    filter = filter[:-5]
+                    date_time = pd.to_datetime(date_time, format='%Y-%m-%d-%H-%M-%S-%f')
+                except: 
+                        if print_error: print('ERROR WITH FILENAME FORMAT CONVENTION EXPECTED: ', f)
+                    # try: # reading files from HST
+                        with fits.open(os.path.join(path)) as hdul: # type: ignore
+                            heads = hdul[0].header # type: ignore
+                            hdul.close()
+                        telescope, camera, date_time, object, filter = heads['TELESCOP'], heads['INSTRUME'], heads['DATE-OBS']+' '+heads['TIME-OBS'], heads['TARGNAME'], heads['FILTER']
+                        try: date_time = pd.to_datetime(date_time, format='%Y-%m-%d %H:%M:%S') # type: ignore
+                        except: date_time = pd.to_datetime(date_time, format='%Y-%m-%d %H:%M:%S.%f') # type: ignore
+                        im_type = telescope
+                    # except:
+                        # print('TTT and HST file format error...')
+                        # telescope, camera, date_time, object, filter = None, None, None, None, None
+                date = date_time.date()
+                if date_time.hour < 12 : date = date + dt.timedelta(days=-1)
+                date = str(date)
+                size_MB = f.stat().st_size / 1e6
+                created = pd.to_datetime(f.stat().st_ctime, unit="s")
+                files_data.append({"filename": name, "path": path, "telescope": telescope, 'camera': camera,
+                                   "object": object, "filter": filter, "size_MB": size_MB,
+                                   "date_time": date_time, "date": date,
+                                   "folder_found": folder_found[k],
+                                   "im_type" : im_type})
+            except: 
+                if print_error: print('Error with file: %s'%f)
+                
+        if len(files)==0:
+            print('WARNING: NO IMAGE FILES FOUND')
+            #return
+        # creation of dataframe
+        if len(files)!=0:
+            df_files = pd.DataFrame(files_data).sort_values("filename").reset_index(drop=True)
+        # Addition of previous dataframe
+        if type(previous_df) != bool:
+            if type(previous_df) != pd.DataFrame:
+                if type(previous_df) == str:
+                    if previous_df[-3:] == 'pkl': previous_df = pd.read_pickle(previous_df)
+                    elif previous_df[-3:] == 'csv' : previous_df = pd.read_csv(previous_df)
+                    else: 
+                        print('ERROR: unrecognized DataFrame format. Use \'.pkl\' or \'.csv\'.')
+                        return
+            if len(files)!=0:
+                self.df_files = pd.concat([df_files, previous_df], ignore_index = True).drop_duplicates(subset = 'filename', keep= 'last')
+            else: self.df_files = previous_df
+        else: self.df_files = df_files
+        # print available images if requested
+        if list_available:
+            print(self.df_files)
+        print('Total number of images found: ', len(self.df_files))
+
+        # Store gravitational lens objects
+        grav_lens = ['QSO0957+561', 'Q2237+030', 'MG1654+1346', 'SDSSJ1004+4112', 'LBQS1333+0113', 'SDSSJ0819+5356',
+             'EinsteinCross', 'DESI-350.3458-03.5082', 'ZTF25abnjznp']
+        # EinsteinCross and Q2237+030 are the same object (?)
+        grav_lens_ra = ['10 01 20.692 h', '22 40 30.234 h', '16 54 41.796 h', '10 04 34.936 h', '13:35:34.8 h', '08 19 59.764 h',
+                        '22 40 30.271 h', '350.3458d', '07:16:34.5h']
+        grav_lens_dec = ['+55 53 55.59 d', '+03 21 30.63 d', '+13 46 21.34 d', '+41 12 42.66 d', '+01 18 05.5 d', '+53 56 24.63 d',
+                         '+03 21 31.03 d', '-03.5082d', '+38:21:08d']
+        grav_data = []
+        for i in range(len(grav_lens)):
+            grav_data.append({
+                'object' : grav_lens[i],
+                'ra' : Angle(grav_lens_ra[i]),
+                'dec' : Angle(grav_lens_dec[i])
+                })
+        self.df_grav_lens = pd.DataFrame(grav_data).sort_values('object').reset_index(drop=True)
+        # filters dictionary :
+        self.dict_filters = {
+            'Ha' : 'Ha', 'Halpha' : 'Ha', 'H-alpha' : 'Ha', 'H' : 'Ha',
+            'Lum' : 'Lum', 'L' : 'Lum',
+            'OIII' : 'OIII', 'O3' : 'OIII', 'O' : 'OIII',
+            'SDSSg' : 'SDSSg', 'g' : 'SDSSg',
+            'SDSSr' : 'SDSSr', 'r' : 'SDSSr',
+            'SDSSi' : 'SDSSi', 'i' : 'SDSSi',
+            'SDSSu' : 'SDSSu', 'u' : 'SDSSu',
+            'SDSSzs' : 'SDSSzs', 'z' : 'SDSSzs',
+            'iz' : 'iz'
+            }
+        
+        # print('Datafiles available:')
+        # print('- df_files')
+        # print('- df_grav_lens')
+
+    
+    def return_index(self, image):
+        """
+        Returns the image path and index in the datafile given one or the other.
+
+        Parameters
+        ----------
+        image: int / str
+            int - image index in datafile \n
+            str - image path
+        """
+        if type(image)==int:
+            image_str = self.df_files.loc[image].filename
+            image_int = image
+        else: 
+            image_str = image
+            try: image_int = self.df_files.index[self.df_files['filename']==image].to_list()[0]
+            except:
+                print('\n ERROR: FILENAME NOT FOUND')
+                return
+        if self.folder_list != False:
+            folder_name = self.df_files.iloc[image_int].folder_found
+            image_str = os.path.join(folder_name, image_str) # type: ignore
+        return image_str, image_int
+    
+
+    def image_finder(self, object, 
+                     date = None, 
+                     filter = None,
+                     return_df = False,
+                     printeo = False
+                     ):
+        """
+        Method to identify the fits file that match an observation object, date and filter.
+        
+        Parameters
+        ----------
+        object : index / str
+            Either the iloc or string to the object in self.df_grav_lens
+
+        date : 'YYYY-MM-DD' (optional hh-mm-ss)
+            If no date is supplied, return possible options
+
+        filter : str
+            Desired filter. If None, return possible options
+        """
+        try:
+            if type(object) == str:
+                if object in self.df_grav_lens['object']:
+                    obj_int = self.df_grav_lens.index[self.df_grav_lens['object'] == object].tolist()
+                    obj_str = object
+                elif object in self.df_files['object'].unique(): 
+                    obj_str = object
+                else:
+                    print('ERROR: OBJECT NAME NOT REGISTERED.\n  Try with one of: ', self.df_grav_lens['object'].tolist(), ' in the saved gravitational lens objects.')
+                    print('Or see the objects found in the folder:')
+                    print(self.df_files['object'].unique())
+                    return
+            elif type(object) in [int, np.int16, np.int32, np.int64, np.int8]:
+                obj_str = self.df_grav_lens['object'].iloc[object]
+                obj_int = object  
+            else: print('Type of ``object`` (',type(object),') not recognized') 
+        except: 
+            print('ERROR: No previously known object was found.\n  Try with one of: ', self.df_grav_lens['object'].tolist())
+        
+        df_filtered = self.df_files[self.df_files["object"]==obj_str].copy()
+
+        if date == None:
+            print('Available date observations:')
+            print(df_filtered.groupby(['object', 'date']).size())
+        
+        else: 
+            if type(date) == str:
+                df_filtered = df_filtered[df_filtered['date'] == date]
+            if type(date) == list:
+                df_filtered = df_filtered[df_filtered['date'] in date]
+
+        if filter != None:
+            df_filtered = df_filtered[df_filtered['filter'] == self.dict_filters[filter]]
+        
+        if printeo:
+            print(df_filtered[['object', 'filter', 'date_time']])
+        
+        if return_df == True:
+            print('Matching index: ')
+            print(df_filtered.index.tolist())
+            return df_filtered
+        else:
+            return df_filtered.index.tolist()
+
+
+    def header_info(self, image,
+                    interesting_keys = ['INSTRUME', 'OBJECT', 'FILTER', 'INTEGT', 'DATE-OBS',
+                                        'RA', 'DEC', 'NAXIS1', 'NAXIS2', 'SCALE', 'FOVX', 'FOVY',
+                                        'CCW', 'CRPIX1', 'CRPIX2', 'FWHM'],
+                    hdul_i = 0
+                                        ):
+        """Method to view general header info.
+        
+        Parameters
+        ----------
+        image : int / str
+            int - index of desired file in dataframe \n
+            string - path to desired fits file
+            
+        interesting_keys: list / 'all'
+            list - list of strings with header keyword \n
+            'all' - will print the whole header
+        """
+        image_str, image_int = self.return_index(image) # type: ignore
+        
+        # Extracting data from header
+        with fits.open(os.path.join(self.dir_img, image_str)) as hdul: # type: ignore
+            heads = hdul[hdul_i].header # type: ignore
+            hdul.close()
+        # printing basic header info
+        print('Image: %s'%image_str)
+        print('\n   --- HEADER DATA ---')
+        if type(interesting_keys) == str and interesting_keys!='all':
+                interesting_keys = [interesting_keys]
+        try:
+            if type(interesting_keys) == str and interesting_keys=='all':
+                print(repr(heads))
+            else:
+                for k in interesting_keys:
+                    if heads.comments[k]!='':
+                        print(k, ' = ', heads[k], '  ---  ', heads.comments[k])
+                    else:
+                        print(k, ' = ', heads[k])
+        except:
+            print('WARNING: WRONG interesting_keys PARAMETER.')
+            print('         Header parameter not recognized. Try the string \'all\' to view the full header')
+
+
+    def view_RGB(self, object, date,
+                 filters = 'irg',
+                 object_coordinates = None,
+                 figsize = (14,10),
+                 manipulation_kw = {
+                       'centered' : True,
+                       'zoom' : False
+                       },
+                 plotting_kw = {
+                        'scalebar_arcsec' : 5,
+                        'scalebar_frame' : False,
+                        'add_circle' : None
+                        },
+                 RGB_kw = {
+                        'stretch' : 5,
+                        'Q' : 8,
+                        'minimum' : None
+                        },
+                 RGB_norm_kw = {
+                        'vmax' : None,
+                        'max_sky' : False
+                        }):
+        """
+        Method to view RGB images:
+        
+        -------
+        Parameters:
+
+        object : str or int or list of str or ints
+            ``str`` with name of object or 
+            ``int`` with object index in ``self.df_grav_lenes``
+
+        date : str 
+
+        filters : str
+            g, r, i, z or other keywords of ``self.dict_filters`` in the desired order for RGB.
+            Can be in a single string with the 1 letter abrevietion or a list of strings with the filter keyword (or full name)
+
+        ... to be continued
+        """
+        # Object coordinates extraction
+        if type(object) == str:
+            try: 
+                obj_int = self.df_grav_lens.index[self.df_grav_lens['object'] == object][0]
+            except: 
+                if object_coordinates == None:
+                    if object not in self.df_files['object']: print('ERROR: Object not known')
+                    else: print('ERROR: Object observed, coordinates are required')
+                    return
+                else:
+                    new_object = {'object' : object, 'ra' : Angle(object_coordinates[0]), 'dec' : Angle(object_coordinates[1])}
+                    self.df_grav_lens.loc[len(self.df_grav_lens)] = new_object
+                    obj_int = self.df_grav_lens.index[self.df_grav_lens['object'] == object][0]
+        else: obj_int = object
+        if object_coordinates == None:
+            obj_coords = (self.df_grav_lens['ra'].loc[obj_int],
+                          self.df_grav_lens['dec'].loc[obj_int])
+        else: obj_coords = object_coordinates
+
+        print('RGB image of object: ', self.df_grav_lens.loc[obj_int].object, ' taken the night of ', date)
+        colors = ['R', 'G', 'B']
+
+        fig, axes = plt.subplots(figsize = figsize)
+        self.nr_nc = (1,1)
+
+        # Loop over each image to obtain file path and header
+        wcs_list = []
+        data_list = []
+        d_w_list = []
+        headers = []
+        print('Cutting out images...')
+        for i in range(3):
+            print('    - ',colors[i],': ', self.dict_filters[filters[i]])
+            filt_i = self.image_finder(obj_int, date = date, filter = self.dict_filters[filters[i]])
+            if len(filt_i) > 1:
+                print('More than one image matching with the object, date and filter specified.')
+                for f in filt_i: print(self.df_files['filename'].loc[f])
+                print('Choosing first match for RGB plot.')
+        
+            img_str = self.df_files['path'].loc[filt_i[0]]
+            self.img_str = img_str
+            self.img_int = self.df_files.index[self.df_files['path']==img_str].to_list()[0]
+            # obtain headers for skyflux and data for title
+            with fits.open(os.path.join(self.dir_img, img_str)) as hdul: # type: ignore
+                headers.append(hdul[0].header) # type: ignore
+                hdul.close()
+
+            # Cutout
+            cutout, _ = self.data_manipulation(img_str, **manipulation_kw) # type: ignore
+            # data_list.append(cutout.data)
+            # wcs_list.append(cutout.wcs)
+            d_w_list.append((cutout.data, cutout.wcs))
+                
+        # Get optimal WCS and output shape covering all images (N up, E left)
+        wcs_out, shape_out = find_optimal_celestial_wcs(d_w_list)
+        # Reprojection of images to common wcs
+        repr_data_list = []
+        print('Rotating and aligning images...')
+        for i, d_w in enumerate(d_w_list):
+            repr_data, _ = reproject_interp(d_w, wcs_out, shape_out = shape_out)
+            repr_data_list.append(repr_data)
+        
+        # Data normalization
+        print('Data normalization...')
+        for i, data in enumerate(repr_data_list):
+            vmin = headers[i]['FLUXSKY']
+            # min and max for manual norm, if max_sky is set, use it to obtain max as max_sky * sky_flux
+            if 'vmax' in RGB_norm_kw.keys(): vmax = RGB_norm_kw['vmax']
+            if 'max_sky' in RGB_norm_kw.keys():
+                if RGB_norm_kw['max_sky'] != False: vmax = RGB_norm_kw['max_sky']*vmin
+            if vmax == None: vmax = np.nanmax(repr_data)
+            # manual normalization
+            data_norm = (data - vmin)/(vmax-vmin)
+            data_mask = data_norm < 1e-3
+            data_norm[data_mask] = 1e-3
+            repr_data_list[i] = data_norm
+
+        # RGB creation
+        print('Creating RGB image...')
+        rgb_default = make_lupton_rgb(repr_data_list[0], repr_data_list[1], repr_data_list[2],
+                                        **RGB_kw)
+
+        title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s - $\bf{Date-time est}$: %s''\n'
+                     r'$\bf{Camera}$: %s - $\bf{RGB Filters}$: %s|%s|%s - $\bf{Seeings}$: %.1f|%.1f|%.1f$^{\prime\prime}$''\n'
+                     r'$\bf{Integrations}$: %s|%s|%s s - $\bf{SNRs}$: %s|%s|%s -  $\bf{Moon D}$: %.1fº''\n'
+                        %(self.df_files.iloc[filt_i[0]]['object'],
+                        self.df_files.iloc[filt_i[0]]['telescope'],
+                        self.df_files.iloc[filt_i[0]]['date_time'].strftime("%Y-%m-%d %H:%M"),
+                        self.df_files.iloc[filt_i[0]]['camera'],
+                        self.dict_filters[filters[0]], self.dict_filters[filters[1]], self.dict_filters[filters[2]],
+                        (float(headers[0]['FWHM'])*float(headers[0]['SCALE'])),
+                        (float(headers[1]['FWHM'])*float(headers[1]['SCALE'])),
+                        (float(headers[2]['FWHM'])*float(headers[2]['SCALE'])),
+                        headers[0]['INTEGT'], headers[1]['INTEGT'], headers[2]['INTEGT'],
+                        headers[0]['OBJECSNR'], headers[1]['OBJECSNR'], headers[2]['OBJECSNR'],
+                        self.get_moon_distance(filt_i[0]).deg))
+        self.plotting(None, None, fig, axes, 0,
+                        RGB = True, rgb_data = rgb_default,
+                        rgb_wcs = wcs_out, title_str = title_str,
+                        **plotting_kw)
+
+
+
+    def view_image(self, image,
+                    RGB = False,
+                    nrows_ncols = None,
+                    figsize = None,
+                    manipulation_kw = {
+                       'centered' : True,
+                       'zoom' : False,
+                       'stretch' : 'linear',
+                       'percentile' : None,
+                       'vminmax' : (None, None),
+                       'rotate': True
+                       },
+                    plotting_kw = {
+                        'cmap' : 'gray',
+                        'scalebar_arcsec' : 5,
+                        'scalebar_frame' : False,
+                        'add_circle' : None
+                        },
+                    RGB_kw = {
+                        'stretch' : 5,
+                        'Q' : 8,
+                        'minimum' : None
+                        },
+                    RGB_norm_kw = {
+                        'vmax' : None,
+                        'max_percentile' : 99,
+                        'max_sky' : False
+                        }
+                    ):
+        """
+        Method to view images. Takes dictionary keywords for ``data_manipulation`` and ``plotting``.
+        """
+        # Multiple images
+        if type(image) == list and RGB == False:
+            print('------\nViewing multiple images:')
+            n_image = len(image)
+            if nrows_ncols == None:
+                if n_image <= 3: nrows_ncols = (1, n_image)
+                else: nrows_ncols = (ceil(np.sqrt(n_image)), ceil(np.sqrt(n_image)))
+            image_list = image
+
+        # Simple image Non RGB
+        if type(image) != list:
+            print('------\nViewing image:')
+            n_image, nrows_ncols = 1, (1,1)
+            image_list = [image]
+        # RGB image
+        if RGB == True: 
+            n_image = 1
+            colors = ['R', 'G', 'B']
+            cutout_RGB = []
+            print('------\nRGB color composite image:')
+            if n_image == 1: nrows_ncols = (1,1)
+            image_list = image
+
+        self.nr_nc = nrows_ncols
+        n_data = len(image_list)
+
+        # if manipulation and plotting are dicts, use the same setup for all images
+        if type(manipulation_kw) == dict:
+            if manipulation_kw['rotate'] == False: plotting_kw['arrows'] = False
+            manipulation_kw = [manipulation_kw]*n_data
+        if type(plotting_kw) == dict: plotting_kw = [plotting_kw]*n_data
+
+        fig, axes = plt.subplots(self.nr_nc[0], self.nr_nc[1], # type: ignore
+                                 figsize = figsize)
+        if n_image == 1: axes = [axes]
+        axes = np.array(axes).reshape(-1)
+        
+        for i, (img, m_k, p_k) in enumerate(zip(image_list, manipulation_kw, plotting_kw)):
+            self.img_str, self.img_int = self.return_index(img) # type: ignore
+            cutout, norm = self.data_manipulation(self.img_str, **m_k) # type: ignore
+
+            if RGB == False:
+                print('    Object: ',self.df_files.object.loc[self.img_int],
+                      '  -  Filter: ',self.df_files['filter'].loc[self.img_int])
+                self.plotting(cutout, norm, fig, axes[i], i,
+                              **p_k)
+            else:
+                # Extracting data from header
+                with fits.open(os.path.join(self.dir_img, self.img_str)) as hdul: # type: ignore
+                    heads = hdul[0].header # type: ignore
+                    hdul.close()
+                if i==0: print('    Object: ', self.df_files.loc[self.img_int].object)
+                print('    - ',colors[i],': ', self.df_files['filter'].loc[self.img_int])
+                # min and max for manual norm, if max_sky is set, use it to obtain max as max_sky * sky_flux
+                vmin = heads['FLUXSKY']
+                if 'vmax' in RGB_norm_kw.keys(): vmax = RGB_norm_kw['vmax']
+                if RGB_norm_kw['max_sky'] != False: vmax = RGB_norm_kw['max_sky']*heads['FLUXSKY']
+                if vmax == None: vmax = np.max(cutout.data)
+                # manual normalization
+                data = (cutout.data - vmin)/(vmax-vmin)
+                data_mask = data < 1e-3
+                data[data_mask] = 1e-3
+                cutout_RGB.append(data)
+
+                if i == len(image_list)-1:                        
+                    rgb_default = make_lupton_rgb(cutout_RGB[0].data, cutout_RGB[1].data, cutout_RGB[2].data,
+                                                  **RGB_kw)
+                    self.plotting(cutout, norm, fig, axes[0],0,
+                                  RGB = True, rgb_data = rgb_default,
+                                  **plotting_kw[i])
+        plt.tight_layout()
+        plt.show()
+
+    def data_manipulation(self, image_str,
+                          centered = True, 
+                          zoom = False,
+                          stretch = 'linear',
+                          percentile = None,
+                          vminmax = (None, None),
+                          rotate = True
+                          ):
+        """
+        Method to prepare images for manipulation. It is internally called. Crops the image and sets visualization normalization and stretch.
+
+        Parameters
+        ---------
+        image : int / string / list
+            int - index of desired file in dataframe \n
+            string - path to desired fits file \n
+
+        centered : True or tuple, optional
+            (x,y) - int for pix coordinates \n
+            (RA, DEC) - wcs coordinates. Accepting both strings or angle values
+
+        zoom : False or Value or Tuple, optional
+            int / (int, int) - pixel size in x and y axis \n
+            Angle / (Angle, Angle) - angular size in RA and DEC
+        
+        stretch : str, optional
+            Image stretch to enhance detail visualization \n
+            ``linear``, ``sqrt``, ``power``, ``log``, ``sinh``, ``asinh``
+        
+        percentile : int or tuple, optional
+            ``int`` - Middle percentile of values to consider for normalization; 
+            ``tuple`` - Lower and upper percentile of values to consider for normalization
+        
+        vminmax : tuple, optional
+            Min and max pixel values for normalization. Overrides ``percentile``.
+            If set as None, keeps the absolute min or max of image
+        """
+        
+
+        # Extracting data from header
+        with fits.open(os.path.join(self.dir_img, image_str)) as hdul:
+            print(image_str)
+            data = hdul[self.im_type_dir[self.df_files.im_type.loc[self.img_int]]['data_i']].data.astype(np.float32) # type: ignore
+            heads = hdul[0].header # type: ignore
+            heads_WCS = hdul[self.im_type_dir[self.df_files.im_type.loc[self.img_int]]['header_WCS']].header  # type: ignore
+            if self.df_files.im_type.loc[self.img_int] == 'Keck II':
+                hdr = hdul[0].header # type : ignore
+                # Fix CD matrix elements: convert strings to floats
+                for key in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']:
+                    if key in hdr:
+                        hdr[key] = float(hdr[key])
+                # Replace deprecated RADECSYS by RADESYSa
+                if 'RADECSYS' in hdr:
+                    hdr['RADESYSa'] = hdr['RADECSYS'].strip()
+                    hdr['RADECSYS']
+                heads_WCS = hdr
+
+            wcs = WCS(heads_WCS)
+            hdul.close()
+        
+        # obtaining central px coordinates
+        x_shape = data.shape[1]
+        y_shape = data.shape[0]
+        if centered == True:
+            center_px = (x_shape//2, y_shape//2)
+        if type(centered)==tuple:
+            if type(centered[0]) == int: # input in px units
+                center_px = tuple(centered)
+            elif type(centered[0]) == str: # input in str to be converted to deg
+                center_angle = SkyCoord(centered[0], centered[1], frame = 'icrs')
+                center_px = skycoord_to_pixel(center_angle, wcs, origin=0)
+            else:
+                center_angle = SkyCoord(centered[0], centered[1], frame = 'icrs')
+                center_px = skycoord_to_pixel(center_angle, wcs, origin=0)
+        
+        # setting zoom
+        if zoom == False:
+            zoom = (x_shape, y_shape)
+            size = (x_shape, y_shape)
+        if self.df_files.im_type.loc[self.img_int] == 'LB':
+            scale = float(heads['SCALE'])
+        elif self.df_files.im_type.loc[self.img_int] == 'HST':
+            scale = float(self.im_type_dir[self.df_files.im_type.loc[self.img_int]]['detector'][heads['DETECTOR']]['SCALE'])
+        elif self.df_files.im_type.loc[self.img_int] == 'Keck II':
+            scale = float(heads['PIXSCALE'])
+        else:
+            print('No pixel scale defined, check image type.')
+            return
+        if type(zoom) == str:
+            zoom = Angle(zoom)
+            size = (zoom.deg / scale * 3600, zoom.deg / scale * 3600)
+        if type(zoom)== tuple:
+            if type(zoom[0]) == str:
+                zoom = (Angle(zoom[0]), Angle(zoom[1]))
+                size = (zoom[0].deg / scale * 3600,zoom[1].deg / scale * 3600) 
+        if type(zoom)==tuple:
+            zoom = zoom[::-1]
+            size = size[::-1]
+
+        # slicing image
+        try:
+            cutout = Cutout2D(data, position = center_px, size = size, #zoom,
+                              wcs = wcs, mode = 'partial')
+        except:
+            print('\n --- \nERROR: the cutout region is outside of the image.')
+            return
+        
+        # rotating image
+        if rotate:
+            wcs_out, shape_out = find_optimal_celestial_wcs((cutout.data, cutout.wcs))
+            data_oriented, _ = reproject_interp((cutout.data, cutout.wcs), wcs_out, shape_out=shape_out)
+            cutout = NDData(data_oriented, wcs = wcs_out)
+        
+        # norm definition
+        if type(percentile) == int or percentile == None:
+            percentile_minmax = (None, None)
+        if type(percentile) == tuple:
+            percentile_minmax = percentile
+            percentile = None
+        if stretch not in {'linear', 'sqrt', 'power', 'log', 'sinh', 'asinh'}:
+            print('ERROR: Stretch should be one of \'linear\', \'sqrt\', \'power\', \'log\', \'sinh\', \'asinh\'')
+            plt.close()
+            return
+        norm = simple_norm(cutout.data, stretch = stretch, 
+                           vmin = vminmax[0], vmax = vminmax[1],
+                           percent = percentile,
+                           min_percent = percentile_minmax[0],
+                           max_percent = percentile_minmax[1])
+        
+        return cutout, norm
+        
+    def plotting(self,
+                 cutout, norm, fig, ax, ax_i,
+                cmap = 'gray',
+                scalebar_arcsec = 5, scalebar_frame = False,
+                add_circle = None,
+                RGB = False,
+                rgb_data = False, rgb_wcs = False, title_str = False,
+                arrows = True
+                ):
+        """
+        Method to plot images, obtains edited data from ``self.data_manipulation()``.
+
+        Parameters
+        ---------
+        cutout : Cutout2D
+            Selected cutout object from ``data_manipulation``
+
+        norm : Norm
+            Selected norm from ``data_manipulation``
+
+        cmap : str, optional
+            Select the desired colormap for the image
+
+        scalebar_arcsec : int, optional
+            Angular size of scalebar in arcsec units
+        
+        scalebar_frame : bool, optional
+            Add frame or not
+
+        add_circle : dict, list of dicts or None, optional
+            Parameters to plot a circle overlay. If None, no circle is plotted. If multiple circles are desired, enter a list of dicts.\n
+            Expected keys: \n
+                'center' : tuple 
+                    (RA, DEC) coordinates as astropy Angle or SkyCoord
+                'size' : astropy.units.Quantity
+                    Angular size (e.g., astropy Angle with units).
+                'color' : str, optional
+                    Circle edge color.
+                'label' : str, optional
+                    Label for the circle to use in legend.
+            
+        fig_kwrds : None or dict, optional
+            Dict with all the keywords desired to insert in ``plt.subplots()``
+
+        figure : None or dict ..... tuple or axis
+            Dict used by view_multiple method. Expected keys: \n
+                'is_simple' : bool
+                'create_fig' : bool
+                    True or False
+                'figsize' : tuple
+                    Looked at if ``create_fig = True``
+                'nrows_ncols' : tuple
+                    Looked at if ``create_fig = True``
+                'fig' : plt.figure object
+                    Looked at if ``create_fig = False``
+                'ax' : plt.axis object
+                    Looked at if ``create_fig = False``
+                'im_i' : int
+                    Subplot index (image index). Looked at if ``create_fig = False``
+
+            None - creates normal figure, does not return nothing \n
+            tuple (int, int) - creates figure with specified conditions. Returns (fig, ax) \n
+            tuple (ax, int, int) - plots image in specified ax[int,int]
+        """
+        if RGB == False: 
+            with fits.open(os.path.join(self.dir_img, self.img_str)) as hdul: # type: ignore
+                heads = hdul[0].header # type: ignore
+                hdul.close()
+            wcs = cutout.wcs
+        else: 
+            wcs = rgb_wcs
+        ax.remove()
+        ax = fig.add_subplot(self.nr_nc[0], self.nr_nc[1], ax_i+1, projection = wcs) # type: ignore
+        if RGB == False:
+        # colorbar
+            im = ax.imshow(cutout.data,
+                            norm = norm, origin = 'lower',
+                            cmap = cmap)
+            divider = make_axes_locatable(ax) # ensure colorbar height equal to inner axis of plot
+            cax = divider.append_axes("right", size = "5%", pad = "7%")
+            cbar = fig.colorbar(im, cax = cax)
+            # hide the entire x-axis (ticks, ticklabels, spine)
+            cbar.ax.tick_params(axis='x', which='both', 
+                    labelbottom=False, labeltop=False,
+                    bottom=False, top=False, length=0)
+            # ticks on the right
+            # cbar.ax.set_ylabel('ADU')
+
+            cbar.ax.tick_params(axis='y', which='both', 
+                    labelright=True, labelleft=False,
+                    right=True, left=False, length=3,
+                    labelsize = 10)
+            # cbar.ax.set_ylabel('ADU', loc = 'lower', labelpad=-5.2)#,  **{'rotation':90})
+
+            cbar.ax.yaxis.set_ticks_position('right')
+            cbar.ax.yaxis.set_label_position('left')
+
+            # 4) create the label (use cbar.set_label so colorbar internals are consistent)
+            cbar.set_label("ADU")   # do not pass rotation here
+
+            # 5) now get the Text object and force rotation + coords
+            lbl = cbar.ax.yaxis.get_label()   # returns the Text instance
+            lbl.set_rotation(90)               # rotate text (90 or 270 as you like)
+            lbl.set_va('center')
+            lbl.set_ha('center')
+
+            # move the label into the gap between image and colorbar
+            # x < 0 moves left; y=0.5 centers vertically
+            cbar.ax.yaxis.set_label_coords(-0.45, 0.5)  # tune -0.45 to taste
+
+            # 6) If you use tight_layout or constrained_layout, run these BEFORE step 5,
+            #    or run a final draw after everything so the Text object is not overwritten:
+            fig.canvas.draw()  
+
+
+        else:
+            ax.imshow(rgb_data, origin = 'lower')
+
+        # Scale bar choosing color depending on luminance of cmap
+        scalebar_angle = scalebar_arcsec/3600*u.deg # type: ignore
+        rgba = plt.get_cmap(cmap)(0.0)
+        luminance = 0.299*rgba[0] + 0.587*rgba[1] + 0.114*rgba[2]
+        scalebar_color = 'white' if (luminance < 0.5 and scalebar_frame == False) else 'black'
+        add_scalebar(ax, scalebar_angle, label="%s arcsec"%str(scalebar_arcsec), 
+                     color=scalebar_color, frame=scalebar_frame,
+                     corner = 'bottom left')
+        # Axis and title
+        ax.set(xlabel='RA', ylabel='DEC')
+        ax.coords.grid(color='gray', alpha=1, linestyle='solid')
+        if title_str == False and self.df_files.im_type.loc[self.img_int]=='LB': # if not false, was created by view_RGB method
+            title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s - $\bf{Seeing}$: %.1f$^{\prime\prime}$''\n'
+                        r'$\bf{Camera}$: %s - $\bf{Filter}$: %s - $\bf{Integration}$: %s s''\n'
+                        r'$\bf{SNR}$: %s - $\bf{Date time}$: %s - $\bf{Moon D}$: %.1fº'
+                        %(self.df_files.iloc[self.img_int]['object'],
+                        self.df_files.iloc[self.img_int]['telescope'],
+                        (float(heads['FWHM'])*float(heads['SCALE'])),
+                        self.df_files.iloc[self.img_int]['camera'],
+                        self.df_files.iloc[self.img_int]['filter'],
+                        heads['INTEGT'], heads['OBJECSNR'],
+                        self.df_files.iloc[self.img_int]['date_time'].strftime("%Y-%m-%d %H:%M"),
+                        self.get_moon_distance(self.img_int).deg))
+        if title_str == False and self.df_files.im_type.loc[self.img_int]=='HST':
+            title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s''\n'
+                        r'$\bf{Camera}$: %s - $\bf{Filter}$: %s - $\bf{Integration}$: %s s''\n'
+                        r'$\bf{Date time}$: %s - $\bf{Moon D}$: %.1fº - $\bf{Sun D}$: %.1fº'
+                        %(self.df_files.iloc[self.img_int]['object'],
+                        self.df_files.iloc[self.img_int]['telescope'],
+                        self.df_files.iloc[self.img_int]['camera'],
+                        self.df_files.iloc[self.img_int]['filter'],
+                        heads['EXPTIME'],
+                        self.df_files.iloc[self.img_int]['date_time'].strftime("%Y-%m-%d %H:%M"),
+                        heads['MOONANGL'], heads['SUNANGLE']))
+        if title_str == False and self.df_files.im_type.loc[self.img_int]=='Keck II':
+            title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s''\n'
+                        r'$\bf{Camera}$: %s - $\bf{Filter}$: %s - $\bf{Integration}$: %s s''\n'
+                        r'$\bf{Date time}$: %s'
+                        %(self.df_files.iloc[self.img_int]['object'],
+                        self.df_files.iloc[self.img_int]['telescope'],
+                        self.df_files.iloc[self.img_int]['camera'],
+                        self.df_files.iloc[self.img_int]['filter'],
+                        heads['EXPOSURE'],
+                        self.df_files.iloc[self.img_int]['date_time'].strftime("%Y-%m-%d %H:%M")))
+        ax.set_title(title_str)
+        ax.minorticks_on()
+
+        # Optional plot of circles
+        if add_circle is not None:
+            if type(add_circle) != list:
+                add_circle = [add_circle]
+            for d_circle in add_circle:
+                center = d_circle.get('center')
+                size = d_circle.get('size')
+                if 'color' not in d_circle: color = 'white'
+                else: color = d_circle.get('color')
+                label = d_circle.get('label')
+                c = SphericalCircle((Angle(center[0]), Angle(center[1])),
+                                    Angle(size),
+                                    edgecolor = color,
+                                    facecolor = 'none',
+                                    transform = ax.get_transform('icrs'))
+                ax.add_patch(c)
+        
+        # optional plot of arrows
+        if arrows:
+            arrs = AnchoredDirectionArrows(ax.transAxes, 'E', 'N', loc='lower right',
+                                           pad = 0, color=scalebar_color, frameon=False,
+                                           length=-0.1, aspect_ratio=-1,
+                                           back_length=0, tail_width=0.2,
+                                           head_width=1.5, head_length=2,
+                                           sep_y = 0.02, sep_x = -0.01,
+                                           fontsize=0.03
+                                           )
+            ax.add_artist(arrs)
+
+    def read_data(self, image, header = False):
+        """Method to view images."""
+        image_str, image_int = self.return_index(image) # type: ignore
+        print('Reading ', image_str)
+
+        # Extracting data from header
+        with fits.open(os.path.join(self.dir_img, image_str)) as hdul: # type: ignore
+            data = hdul[self.im_type_dir[self.df_files.im_type.loc[image_int]]['data_i']].data.astype(np.float32) # type: ignore
+            head = hdul[0].header # type: ignore
+            hdul.close()
+
+        if header == False: return data
+        else: return head
+    
+    def get_moon_distance(self, image):
+        """
+        Method to calculate the angular separation with the Moon in degrees for a given observation.
+        
+        Parameters
+        ---------
+        image : int or str
+            index of observation image or string to .fits file.
+            
+        Returns:
+            astropy.Angle object with angular separation"""
+
+        image_str, image_int = self.return_index(image) # type: ignore
+        with fits.open(os.path.join(self.dir_img, image_str)) as hdul: # type: ignore
+            heads = hdul[0].header # type: ignore
+            hdul.close()
+        RA = str(heads['RA']) + ' d'
+        DEC = str(heads['DEC']) + ' d'
+        time = Time(self.df_files.iloc[image_int]['date_time'])
+        loc = EarthLocation.of_site('Observatorio del Teide')
+        moon_coords = get_body('moon', time = time, location = loc)
+        moon_coords = SkyCoord(ra = moon_coords.ra, dec = moon_coords.dec, frame = 'icrs', unit = u.deg) # type: ignore
+        obj_coords = SkyCoord(ra = Angle(RA), dec = Angle(DEC), frame = 'icrs', unit = u.deg) # type: ignore
+        sep = obj_coords.separation(moon_coords)
+        return sep
+
+
