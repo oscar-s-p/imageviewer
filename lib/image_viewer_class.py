@@ -40,6 +40,7 @@ class image_viewer:
     def __init__(self, directory: str = '',
                list_available = False,
                folder_list = [],
+               filters = False,
                previous_df = False,
                print_error = True):
         """Class to quickly open FITS images. Searches in given directory.
@@ -140,24 +141,31 @@ class image_viewer:
                     # except:
                         # print('TTT and HST file format error...')
                         # telescope, camera, date_time, object, filter = None, None, None, None, None
-                date = date_time.date()
-                if date_time.hour < 12 : date = date + dt.timedelta(days=-1)
-                date = str(date)
-                size_MB = f.stat().st_size / 1e6
-                created = pd.to_datetime(f.stat().st_ctime, unit="s")
-                files_data.append({"filename": name, "path": path, "telescope": telescope, 'camera': camera,
-                                   "object": object, "filter": filter, "size_MB": size_MB,
-                                   "date_time": date_time, "date": date,
-                                   "folder_found": folder_found[k],
-                                   "im_type" : im_type})
+                add = True
+                if type(filters)==dict:
+                    for ky in filters.keys():
+                        if filters[ky] != locals()[ky]:
+                            add = add*False
+                        #object == filters['object'] or []:
+                if add == True:
+                    date = date_time.date()
+                    if date_time.hour < 12 : date = date + dt.timedelta(days=-1)
+                    date = str(date)
+                    size_MB = f.stat().st_size / 1e6
+                    created = pd.to_datetime(f.stat().st_ctime, unit="s")
+                    files_data.append({"filename": name, "path": path, "telescope": telescope, 'camera': camera,
+                                    "object": object, "filter": filter, "size_MB": size_MB,
+                                    "date_time": date_time, "date": date,
+                                    "folder_found": folder_found[k],
+                                    "im_type" : im_type})
             except: 
                 if print_error: print('Error with file: %s'%f)
                 
-        if len(files)==0:
+        if len(files_data)==0:
             print('WARNING: NO IMAGE FILES FOUND')
             #return
         # creation of dataframe
-        if len(files)!=0:
+        if len(files_data)!=0:
             df_files = pd.DataFrame(files_data).sort_values("filename").reset_index(drop=True)
         # Addition of previous dataframe
         if type(previous_df) != bool:
@@ -168,7 +176,10 @@ class image_viewer:
                     else: 
                         print('ERROR: unrecognized DataFrame format. Use \'.pkl\' or \'.csv\'.')
                         return
-            if len(files)!=0:
+            if filters!=False and type(filters)==dict:
+                for k in filters.keys():
+                    previous_df = previous_df[previous_df[k] == filters[k]]
+            if len(files_data)!=0:
                 self.df_files = pd.concat([df_files, previous_df], ignore_index = True).drop_duplicates(subset = 'filename', keep= 'last')
             else: self.df_files = previous_df
         else: self.df_files = df_files
@@ -222,16 +233,21 @@ class image_viewer:
             str - image path
         """
         if type(image)==int:
-            image_str = self.df_files.loc[image].filename
+            if image<0: image_str = self.df_files.iloc[image].filename
+            else: image_str = self.df_files.loc[image].filename
             image_int = image
         else: 
             image_str = image
             try: image_int = self.df_files.index[self.df_files['filename']==image].to_list()[0]
             except:
-                print('\n ERROR: FILENAME NOT FOUND')
-                return
+                try: 
+                    image_int = self.df_files.index[self.df_files['path']==image].to_list()[0]
+                    image_str = self.df_files.loc[image_int]['filename'] # type: ignore
+                except:
+                    print('\n ERROR: FILENAME NOT FOUND')
+                    return
         if self.folder_list != False:
-            folder_name = self.df_files.iloc[image_int].folder_found
+            folder_name = self.df_files.loc[image_int].folder_found
             image_str = os.path.join(folder_name, image_str) # type: ignore
         return image_str, image_int
     
@@ -299,6 +315,46 @@ class image_viewer:
             return df_filtered
         else:
             return df_filtered.index.tolist()
+        
+    def dataframe_add(self, label):
+        """Method to add columns to existing `self.df_files`.
+        
+        Parameters
+        ----------
+        label : str / list(str)
+            Can be `seeing`, `moon`, ...
+        """
+        if type(label)==str: label = [label]
+        # function to get seeing
+        def get_seeing_from_filename(fname):
+            with fits.open(fname) as hdul: # type: ignore
+                heads = hdul[0].header # type: ignore
+                hdul.close()
+            try: s = float(heads['FWHM'])*float(heads['SCALE'])
+            except: s = np.nan
+            return s
+        # function to get moon distance
+        def get_moon_from_filename(fname):
+            try: moon = self.get_moon_distance(fname).deg
+            except: moon = np.nan
+            return moon
+        # function to get integration time
+        def get_integration_from_filename(fname):
+            with fits.open(fname) as hdul: # type: ignore
+                heads = hdul[0].header # type: ignore
+                hdul.close()
+            try: t = float(heads['INTEGT'])
+            except: t = np.nan
+            return t
+        #for file in self.df_files['filename']:
+        if 'seeing' in label:
+            self.df_files["seeing"] = self.df_files["path"].map(get_seeing_from_filename)
+        if 'moon' in label:
+            self.df_files["moon"] = self.df_files["path"].map(get_moon_from_filename)
+        if 'integration' in label:
+            self.df_files["integration"] = self.df_files["path"].map(get_integration_from_filename)
+
+
 
 
     def header_info(self, image,
@@ -949,7 +1005,7 @@ class image_viewer:
             hdul.close()
         RA = str(heads['RA']) + ' d'
         DEC = str(heads['DEC']) + ' d'
-        time = Time(self.df_files.iloc[image_int]['date_time'])
+        time = Time(self.df_files.loc[image_int]['date_time'])
         loc = EarthLocation.of_site('Observatorio del Teide')
         moon_coords = get_body('moon', time = time, location = loc)
         moon_coords = SkyCoord(ra = moon_coords.ra, dec = moon_coords.dec, frame = 'icrs', unit = u.deg) # type: ignore
