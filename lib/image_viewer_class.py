@@ -42,7 +42,8 @@ class image_viewer:
                folder_list = [],
                filters = False,
                previous_df = False,
-               print_error = True):
+               print_error = True,
+               bad_format = False):
         """Class to quickly open FITS images. Searches in given directory.
         
         Attributes
@@ -94,8 +95,13 @@ class image_viewer:
                                  'header_i' : 0,
                                  'header_WCS' : 0,
                                  'detector' : 
-                                    {'Aladdin 3'}}
+                                    {'Aladdin 3'}},
+                            'bad':
+                                {'data_i' : 0,
+                                 'header_i' : 0,
+                                 'header_WCS' : 0}
                                 }
+        self.bad_format = bad_format
         
         self.folder_list = folder_list
         print('Current working directory: ' + os.getcwd())
@@ -160,6 +166,10 @@ class image_viewer:
                                     "im_type" : im_type})
             except: 
                 if print_error: print('Error with file: %s'%f)
+                if bad_format:
+                    name = f.name
+                    path = str(f.resolve())
+                    files_data.append({"filename": name, "path": path, "im_type" : 'bad'})
                 
         if len(files_data)==0:
             print('WARNING: NO IMAGE FILES FOUND')
@@ -246,9 +256,10 @@ class image_viewer:
                 except:
                     print('\n ERROR: FILENAME NOT FOUND')
                     return
-        if self.folder_list != False:
-            folder_name = self.df_files.loc[image_int].folder_found
-            image_str = os.path.join(folder_name, image_str) # type: ignore
+        if self.bad_format==False:
+            if self.folder_list != False:
+                folder_name = self.df_files.loc[image_int].folder_found
+                image_str = os.path.join(folder_name, image_str) # type: ignore
         return image_str, image_int
     
 
@@ -316,13 +327,15 @@ class image_viewer:
         else:
             return df_filtered.index.tolist()
         
+
+
     def dataframe_add(self, label):
         """Method to add columns to existing `self.df_files`.
         
         Parameters
         ----------
         label : str / list(str)
-            Can be `seeing`, `moon`, ...
+            Can be `seeing`, `moon`, `integration`, `EZP`...
         """
         if type(label)==str: label = [label]
         # function to get seeing
@@ -346,6 +359,14 @@ class image_viewer:
             try: t = float(heads['INTEGT'])
             except: t = np.nan
             return t
+        # function to get EZP
+        def get_EZP_from_filename(fname):
+            with fits.open(fname) as hdul: # type: ignore
+                heads = hdul[0].header # type: ignore
+                hdul.close()
+            try: ezp = float(heads['EZP'])
+            except: ezp = np.nan
+            return ezp
         #for file in self.df_files['filename']:
         if 'seeing' in label:
             self.df_files["seeing"] = self.df_files["path"].map(get_seeing_from_filename)
@@ -353,6 +374,9 @@ class image_viewer:
             self.df_files["moon"] = self.df_files["path"].map(get_moon_from_filename)
         if 'integration' in label:
             self.df_files["integration"] = self.df_files["path"].map(get_integration_from_filename)
+        if 'EZP' in label:
+            self.df_files["EZP"] = self.df_files["path"].map(get_EZP_from_filename)
+
 
 
 
@@ -543,10 +567,11 @@ class image_viewer:
 
 
 
-    def view_image(self, image,
+    def view_image(self, image, 
                     RGB = False,
                     nrows_ncols = None,
                     figsize = None,
+                    save_name = None,
                     manipulation_kw = {
                        'centered' : True,
                        'zoom' : False,
@@ -603,7 +628,12 @@ class image_viewer:
 
         # if manipulation and plotting are dicts, use the same setup for all images
         if type(manipulation_kw) == dict:
-            if manipulation_kw['rotate'] == False: plotting_kw['arrows'] = False
+            if 'rotate' not in manipulation_kw.keys(): manipulation_kw['rotate'] = True
+            if manipulation_kw['rotate'] == False: 
+                if type(plotting_kw)==dict: plotting_kw['arrows'] = False
+                else: 
+                    for i in range(len(plotting_kw)):
+                        plotting_kw[i]['arrows'] = False
             manipulation_kw = [manipulation_kw]*n_data
         if type(plotting_kw) == dict: plotting_kw = [plotting_kw]*n_data
 
@@ -617,10 +647,11 @@ class image_viewer:
             cutout, norm = self.data_manipulation(self.img_str, **m_k) # type: ignore
 
             if RGB == False:
-                print('    Object: ',self.df_files.object.loc[self.img_int],
-                      '  -  Filter: ',self.df_files['filter'].loc[self.img_int])
+                if self.bad_format==False:
+                    print('    Object: ',self.df_files.object.loc[self.img_int],
+                        '  -  Filter: ',self.df_files['filter'].loc[self.img_int])
                 self.plotting(cutout, norm, fig, axes[i], i,
-                              **p_k)
+                            **p_k)
             else:
                 # Extracting data from header
                 with fits.open(os.path.join(self.dir_img, self.img_str)) as hdul: # type: ignore
@@ -646,6 +677,8 @@ class image_viewer:
                                   RGB = True, rgb_data = rgb_default,
                                   **plotting_kw[i])
         plt.tight_layout()
+        if type(save_name) == str:
+            plt.savefig(save_name, dpi=300)
         plt.show()
 
     def data_manipulation(self, image_str,
@@ -727,7 +760,7 @@ class image_viewer:
         if zoom == False:
             zoom = (x_shape, y_shape)
             size = (x_shape, y_shape)
-        if self.df_files.im_type.loc[self.img_int] == 'LB':
+        if self.df_files.im_type.loc[self.img_int] == 'LB' or self.df_files.im_type.loc[self.img_int]=='bad':
             scale = float(heads['SCALE'])
         elif self.df_files.im_type.loc[self.img_int] == 'HST':
             scale = float(self.im_type_dir[self.df_files.im_type.loc[self.img_int]]['detector'][heads['DETECTOR']]['SCALE'])
