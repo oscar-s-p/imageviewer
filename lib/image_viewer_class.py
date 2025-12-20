@@ -425,6 +425,7 @@ class image_viewer:
 
 
     def view_RGB(self, object, date,
+                 name_list = False, # use to set directly the files for R G and B channels 
                  filters = 'irg',
                  object_coordinates = None,
                  figsize = (14,10),
@@ -483,7 +484,8 @@ class image_viewer:
                           self.df_grav_lens['dec'].loc[obj_int])
         else: obj_coords = object_coordinates
 
-        print('RGB image of object: ', self.df_grav_lens.loc[obj_int].object, ' taken the night of ', date)
+        if type(name_list) == bool:
+            print('RGB image of object: ', self.df_grav_lens.loc[obj_int].object, ' taken the night of ', date)
         colors = ['R', 'G', 'B']
 
         fig, axes = plt.subplots(figsize = figsize)
@@ -496,14 +498,17 @@ class image_viewer:
         headers = []
         print('Cutting out images...')
         for i in range(3):
-            print('    - ',colors[i],': ', self.dict_filters[filters[i]])
-            filt_i = self.image_finder(obj_int, date = date, filter = self.dict_filters[filters[i]])
+            if type(name_list)== bool:
+                print('    - ',colors[i],': ', self.dict_filters[filters[i]])
+                filt_i = self.image_finder(obj_int, date = date, filter = self.dict_filters[filters[i]])
+            else: filt_i = [i]
             if len(filt_i) > 1:
                 print('More than one image matching with the object, date and filter specified.')
                 for f in filt_i: print(self.df_files['filename'].loc[f])
                 print('Choosing first match for RGB plot.')
-        
-            img_str = self.df_files['path'].loc[filt_i[0]]
+            if type(name_list)==bool:
+                img_str = self.df_files['path'].loc[filt_i[0]]
+            else: img_str = name_list[i]
             self.img_str = img_str
             self.img_int = self.df_files.index[self.df_files['path']==img_str].to_list()[0]
             # obtain headers for skyflux and data for title
@@ -545,21 +550,22 @@ class image_viewer:
         print('Creating RGB image...')
         rgb_default = make_lupton_rgb(repr_data_list[0], repr_data_list[1], repr_data_list[2],
                                         **RGB_kw)
-
-        title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s - $\bf{Date-time est}$: %s''\n'
-                     r'$\bf{Camera}$: %s - $\bf{RGB Filters}$: %s|%s|%s - $\bf{Seeings}$: %.1f|%.1f|%.1f$^{\prime\prime}$''\n'
-                     r'$\bf{Integrations}$: %s|%s|%s s - $\bf{SNRs}$: %s|%s|%s -  $\bf{Moon D}$: %.1fº''\n'
-                        %(self.df_files.iloc[filt_i[0]]['object'],
-                        self.df_files.iloc[filt_i[0]]['telescope'],
-                        self.df_files.iloc[filt_i[0]]['date_time'].strftime("%Y-%m-%d %H:%M"),
-                        self.df_files.iloc[filt_i[0]]['camera'],
-                        self.dict_filters[filters[0]], self.dict_filters[filters[1]], self.dict_filters[filters[2]],
-                        (float(headers[0]['FWHM'])*float(headers[0]['SCALE'])),
-                        (float(headers[1]['FWHM'])*float(headers[1]['SCALE'])),
-                        (float(headers[2]['FWHM'])*float(headers[2]['SCALE'])),
-                        headers[0]['INTEGT'], headers[1]['INTEGT'], headers[2]['INTEGT'],
-                        headers[0]['OBJECSNR'], headers[1]['OBJECSNR'], headers[2]['OBJECSNR'],
-                        self.get_moon_distance(filt_i[0]).deg))
+        if self.bad_format==False:
+            title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s - $\bf{Date-time est}$: %s''\n'
+                        r'$\bf{Camera}$: %s - $\bf{RGB Filters}$: %s|%s|%s - $\bf{Seeings}$: %.1f|%.1f|%.1f$^{\prime\prime}$''\n'
+                        r'$\bf{Integrations}$: %s|%s|%s s - $\bf{SNRs}$: %s|%s|%s -  $\bf{Moon D}$: %.1fº''\n'
+                            %(self.df_files.iloc[filt_i[0]]['object'],
+                            self.df_files.iloc[filt_i[0]]['telescope'],
+                            self.df_files.iloc[filt_i[0]]['date_time'].strftime("%Y-%m-%d %H:%M"),
+                            self.df_files.iloc[filt_i[0]]['camera'],
+                            self.dict_filters[filters[0]], self.dict_filters[filters[1]], self.dict_filters[filters[2]],
+                            (float(headers[0]['FWHM'])*float(headers[0]['SCALE'])),
+                            (float(headers[1]['FWHM'])*float(headers[1]['SCALE'])),
+                            (float(headers[2]['FWHM'])*float(headers[2]['SCALE'])),
+                            headers[0]['INTEGT'], headers[1]['INTEGT'], headers[2]['INTEGT'],
+                            headers[0]['OBJECSNR'], headers[1]['OBJECSNR'], headers[2]['OBJECSNR'],
+                            self.get_moon_distance(filt_i[0]).deg))
+        else: title_str = 'RGB image'
         self.plotting(None, None, fig, axes, 0,
                         RGB = True, rgb_data = rgb_default,
                         rgb_wcs = wcs_out, title_str = title_str,
