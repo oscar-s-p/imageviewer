@@ -43,7 +43,8 @@ class image_viewer:
                filters = False,
                previous_df = False,
                print_error = True,
-               bad_format = False):
+               bad_format = False,
+               im_type_input = False):
         """Class to quickly open FITS images. Searches in given directory.
         
         Attributes
@@ -193,6 +194,11 @@ class image_viewer:
                 self.df_files = pd.concat([df_files, previous_df], ignore_index = True).drop_duplicates(subset = 'filename', keep= 'last')
             else: self.df_files = previous_df
         else: self.df_files = df_files
+        # if im_type not previously defined in dataset
+        if 'im_type' not in self.df_files.columns and im_type_input == False:
+            print('ERROR, `im_type` not defined in dataset. Give it as an input parameter.')
+        if im_type_input!=False:
+            self.df_files['im_type'] = im_type_input
         # print available images if requested
         if list_available:
             print(self.df_files)
@@ -232,7 +238,7 @@ class image_viewer:
         # print('- df_grav_lens')
 
     
-    def return_index(self, image):
+    def return_index(self, image, iloc = False):
         """
         Returns the image path and index in the datafile given one or the other.
 
@@ -243,7 +249,7 @@ class image_viewer:
             str - image path
         """
         if type(image)==int:
-            if image<0: image_str = self.df_files.iloc[image].filename
+            if iloc: image_str = self.df_files.iloc[image].filename
             else: image_str = self.df_files.loc[image].filename
             image_int = image
         else: 
@@ -258,7 +264,8 @@ class image_viewer:
                     return
         if self.bad_format==False:
             if self.folder_list != False:
-                folder_name = self.df_files.loc[image_int].folder_found
+                if iloc: folder_name = self.df_files.iloc[image_int].folder_found
+                else: folder_name = self.df_files.loc[image_int].folder_found
                 image_str = os.path.join(folder_name, image_str) # type: ignore
         return image_str, image_int
     
@@ -351,6 +358,14 @@ class image_viewer:
             try: moon = self.get_moon_distance(fname).deg
             except: moon = np.nan
             return moon
+        # 2 function to get moon distance
+        def get_moon_2_from_filename(fname):
+            with fits.open(fname) as hdul: # type: ignore
+                heads = hdul[0].header # type: ignore
+                hdul.close()
+            try: m2 = heads['MOONDIST']
+            except: m2 = np.nan
+            return m2
         # function to get integration time
         def get_integration_from_filename(fname):
             with fits.open(fname) as hdul: # type: ignore
@@ -367,25 +382,36 @@ class image_viewer:
             try: ezp = float(heads['EZP'])
             except: ezp = np.nan
             return ezp
+        # function to get other keyword from header
+        def get_kw_from_filename(fname, kw = False):
+            with fits.open(fname) as hdul: # type: ignore
+                heads = hdul[0].header # type: ignore
+                hdul.close()
+            try: kw_value = float(heads[kw])
+            except: kw_value = np.nan
+            return kw_value
         #for file in self.df_files['filename']:
         if 'seeing' in label:
             self.df_files["seeing"] = self.df_files["path"].map(get_seeing_from_filename)
         if 'moon' in label:
             self.df_files["moon"] = self.df_files["path"].map(get_moon_from_filename)
+        if 'moon2' in label:
+            self.df_files["moon2"] = self.df_files["path"].map(get_moon_2_from_filename)
         if 'integration' in label:
             self.df_files["integration"] = self.df_files["path"].map(get_integration_from_filename)
         if 'EZP' in label:
             self.df_files["EZP"] = self.df_files["path"].map(get_EZP_from_filename)
-
-
-
+        for lab in label:
+            if lab not in ['seeing', 'moon', 'moon2', 'integration', 'EZP']:
+                self.df_files[lab] = self.df_files["path"].map(lambda x: get_kw_from_filename(x, kw = lab))
 
 
     def header_info(self, image,
                     interesting_keys = ['INSTRUME', 'OBJECT', 'FILTER', 'INTEGT', 'DATE-OBS',
                                         'RA', 'DEC', 'NAXIS1', 'NAXIS2', 'SCALE', 'FOVX', 'FOVY',
                                         'CCW', 'CRPIX1', 'CRPIX2', 'FWHM'],
-                    hdul_i = 0
+                    hdul_i = 0,
+                    iloc = False
                                         ):
         """Method to view general header info.
         
@@ -399,7 +425,7 @@ class image_viewer:
             list - list of strings with header keyword \n
             'all' - will print the whole header
         """
-        image_str, image_int = self.return_index(image) # type: ignore
+        image_str, image_int = self.return_index(image, iloc = iloc) # type: ignore
         
         # Extracting data from header
         with fits.open(os.path.join(self.dir_img, image_str)) as hdul: # type: ignore
@@ -601,7 +627,8 @@ class image_viewer:
                         'vmax' : None,
                         'max_percentile' : 99,
                         'max_sky' : False
-                        }
+                        },
+                    iloc = False
                     ):
         """
         Method to view images. Takes dictionary keywords for ``data_manipulation`` and ``plotting``.
@@ -649,22 +676,25 @@ class image_viewer:
         axes = np.array(axes).reshape(-1)
         
         for i, (img, m_k, p_k) in enumerate(zip(image_list, manipulation_kw, plotting_kw)):
-            self.img_str, self.img_int = self.return_index(img) # type: ignore
-            cutout, norm = self.data_manipulation(self.img_str, **m_k) # type: ignore
+            self.img_str, self.img_int = self.return_index(img, iloc = iloc) # type: ignore
+            if iloc: df_file = self.df_files.iloc[self.img_int]
+            else: df_file = self.df_files.loc[self.img_int]
+            cutout, norm = self.data_manipulation(self.img_str, iloc = iloc, **m_k) # type: ignore
 
             if RGB == False:
                 if self.bad_format==False:
-                    print('    Object: ',self.df_files.object.loc[self.img_int],
-                        '  -  Filter: ',self.df_files['filter'].loc[self.img_int])
+                    print('    Object: ', df_file['object'],
+                        '  -  Filter: ', df_file['filter'])
                 self.plotting(cutout, norm, fig, axes[i], i,
-                            **p_k)
+                              iloc = iloc,
+                              **p_k)
             else:
                 # Extracting data from header
                 with fits.open(os.path.join(self.dir_img, self.img_str)) as hdul: # type: ignore
                     heads = hdul[0].header # type: ignore
                     hdul.close()
-                if i==0: print('    Object: ', self.df_files.loc[self.img_int].object)
-                print('    - ',colors[i],': ', self.df_files['filter'].loc[self.img_int])
+                if i==0: print('    Object: ', df_file['object'])
+                print('    - ',colors[i],': ', df_file['filter'])
                 # min and max for manual norm, if max_sky is set, use it to obtain max as max_sky * sky_flux
                 vmin = heads['FLUXSKY']
                 if 'vmax' in RGB_norm_kw.keys(): vmax = RGB_norm_kw['vmax']
@@ -681,6 +711,7 @@ class image_viewer:
                                                   **RGB_kw)
                     self.plotting(cutout, norm, fig, axes[0],0,
                                   RGB = True, rgb_data = rgb_default,
+                                  iloc = iloc,
                                   **plotting_kw[i])
         plt.tight_layout()
         if type(save_name) == str:
@@ -693,7 +724,8 @@ class image_viewer:
                           stretch = 'linear',
                           percentile = None,
                           vminmax = (None, None),
-                          rotate = True
+                          rotate = True,
+                          iloc = False
                           ):
         """
         Method to prepare images for manipulation. It is internally called. Crops the image and sets visualization normalization and stretch.
@@ -727,12 +759,15 @@ class image_viewer:
         
 
         # Extracting data from header
+        if iloc: im_type = self.df_files.im_type.iloc[self.img_int]
+        else: im_type = self.df_files.im_type.loc[self.img_int]
+
         with fits.open(os.path.join(self.dir_img, image_str)) as hdul:
             print(image_str)
-            data = hdul[self.im_type_dir[self.df_files.im_type.loc[self.img_int]]['data_i']].data.astype(np.float32) # type: ignore
+            data = hdul[self.im_type_dir[im_type]['data_i']].data.astype(np.float32) # type: ignore
             heads = hdul[0].header # type: ignore
-            heads_WCS = hdul[self.im_type_dir[self.df_files.im_type.loc[self.img_int]]['header_WCS']].header  # type: ignore
-            if self.df_files.im_type.loc[self.img_int] == 'Keck II':
+            heads_WCS = hdul[self.im_type_dir[im_type]['header_WCS']].header  # type: ignore
+            if im_type == 'Keck II':
                 hdr = hdul[0].header # type : ignore
                 # Fix CD matrix elements: convert strings to floats
                 for key in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']:
@@ -766,11 +801,11 @@ class image_viewer:
         if zoom == False:
             zoom = (x_shape, y_shape)
             size = (x_shape, y_shape)
-        if self.df_files.im_type.loc[self.img_int] == 'LB' or self.df_files.im_type.loc[self.img_int]=='bad':
+        if im_type == 'LB' or im_type=='bad':
             scale = float(heads['SCALE'])
-        elif self.df_files.im_type.loc[self.img_int] == 'HST':
-            scale = float(self.im_type_dir[self.df_files.im_type.loc[self.img_int]]['detector'][heads['DETECTOR']]['SCALE'])
-        elif self.df_files.im_type.loc[self.img_int] == 'Keck II':
+        elif im_type == 'HST':
+            scale = float(self.im_type_dir[im_type]['detector'][heads['DETECTOR']]['SCALE'])
+        elif im_type == 'Keck II':
             scale = float(heads['PIXSCALE'])
         else:
             print('No pixel scale defined, check image type.')
@@ -825,7 +860,8 @@ class image_viewer:
                 add_circle = None,
                 RGB = False,
                 rgb_data = False, rgb_wcs = False, title_str = False,
-                arrows = True
+                arrows = True,
+                iloc = False
                 ):
         """
         Method to plot images, obtains edited data from ``self.data_manipulation()``.
@@ -947,39 +983,41 @@ class image_viewer:
         # Axis and title
         ax.set(xlabel='RA', ylabel='DEC')
         ax.coords.grid(color='gray', alpha=1, linestyle='solid')
-        if title_str == False and self.df_files.im_type.loc[self.img_int]=='LB': # if not false, was created by view_RGB method
+        if iloc: df_file_loc = self.df_files.iloc[self.img_int]
+        else: df_file_loc = self.df_files.loc[self.img_int]
+        if title_str == False and df_file_loc['im_type']=='LB': #  # type: ignore -- if not false, was created by view_RGB method
             title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s - $\bf{Seeing}$: %.1f$^{\prime\prime}$''\n'
                         r'$\bf{Camera}$: %s - $\bf{Filter}$: %s - $\bf{Integration}$: %s s''\n'
                         r'$\bf{SNR}$: %s - $\bf{Date time}$: %s - $\bf{Moon D}$: %.1fº'
-                        %(self.df_files.iloc[self.img_int]['object'],
-                        self.df_files.iloc[self.img_int]['telescope'],
+                        %(df_file_loc['object'],
+                        df_file_loc['telescope'],
                         (float(heads['FWHM'])*float(heads['SCALE'])),
-                        self.df_files.iloc[self.img_int]['camera'],
-                        self.df_files.iloc[self.img_int]['filter'],
+                        df_file_loc['camera'],
+                        df_file_loc['filter'],
                         heads['INTEGT'], heads['OBJECSNR'],
-                        self.df_files.iloc[self.img_int]['date_time'].strftime("%Y-%m-%d %H:%M"),
-                        self.get_moon_distance(self.img_int).deg))
-        if title_str == False and self.df_files.im_type.loc[self.img_int]=='HST':
+                        df_file_loc['date_time'].strftime("%Y-%m-%d %H:%M"),
+                        self.get_moon_distance(self.img_int, iloc = iloc).deg))
+        if title_str == False and df_file_loc['im_type']=='HST':  # type: ignore
             title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s''\n'
                         r'$\bf{Camera}$: %s - $\bf{Filter}$: %s - $\bf{Integration}$: %s s''\n'
                         r'$\bf{Date time}$: %s - $\bf{Moon D}$: %.1fº - $\bf{Sun D}$: %.1fº'
-                        %(self.df_files.iloc[self.img_int]['object'],
-                        self.df_files.iloc[self.img_int]['telescope'],
-                        self.df_files.iloc[self.img_int]['camera'],
-                        self.df_files.iloc[self.img_int]['filter'],
+                        %(df_file_loc['object'],
+                        df_file_loc['telescope'],
+                        df_file_loc['camera'],
+                        df_file_loc['filter'],
                         heads['EXPTIME'],
-                        self.df_files.iloc[self.img_int]['date_time'].strftime("%Y-%m-%d %H:%M"),
+                        df_file_loc['date_time'].strftime("%Y-%m-%d %H:%M"),
                         heads['MOONANGL'], heads['SUNANGLE']))
-        if title_str == False and self.df_files.im_type.loc[self.img_int]=='Keck II':
+        if title_str == False and df_file_loc['im_type']=='Keck II': # type: ignore
             title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s''\n'
                         r'$\bf{Camera}$: %s - $\bf{Filter}$: %s - $\bf{Integration}$: %s s''\n'
                         r'$\bf{Date time}$: %s'
-                        %(self.df_files.iloc[self.img_int]['object'],
-                        self.df_files.iloc[self.img_int]['telescope'],
-                        self.df_files.iloc[self.img_int]['camera'],
-                        self.df_files.iloc[self.img_int]['filter'],
+                        %(df_file_loc['object'],
+                        df_file_loc['telescope'],
+                        df_file_loc['camera'],
+                        df_file_loc['filter'],
                         heads['EXPOSURE'],
-                        self.df_files.iloc[self.img_int]['date_time'].strftime("%Y-%m-%d %H:%M")))
+                        df_file_loc['date_time'].strftime("%Y-%m-%d %H:%M")))
         ax.set_title(title_str)
         ax.minorticks_on()
 
@@ -1012,21 +1050,22 @@ class image_viewer:
                                            )
             ax.add_artist(arrs)
 
-    def read_data(self, image, header = False):
+    def read_data(self, image, header = False, iloc = False):
         """Method to view images."""
         image_str, image_int = self.return_index(image) # type: ignore
         print('Reading ', image_str)
 
         # Extracting data from header
         with fits.open(os.path.join(self.dir_img, image_str)) as hdul: # type: ignore
-            data = hdul[self.im_type_dir[self.df_files.im_type.loc[image_int]]['data_i']].data.astype(np.float32) # type: ignore
+            if iloc: data = hdul[self.im_type_dir[self.df_files.im_type.iloc[image_int]]['data_i']].data.astype(np.float32) # type: ignore
+            else: data = hdul[self.im_type_dir[self.df_files.im_type.loc[image_int]]['data_i']].data.astype(np.float32) # type: ignore
             head = hdul[0].header # type: ignore
             hdul.close()
 
         if header == False: return data
         else: return head
     
-    def get_moon_distance(self, image):
+    def get_moon_distance(self, image, iloc = False):
         """
         Method to calculate the angular separation with the Moon in degrees for a given observation.
         
@@ -1038,13 +1077,14 @@ class image_viewer:
         Returns:
             astropy.Angle object with angular separation"""
 
-        image_str, image_int = self.return_index(image) # type: ignore
+        image_str, image_int = self.return_index(image, iloc = iloc) # type: ignore
         with fits.open(os.path.join(self.dir_img, image_str)) as hdul: # type: ignore
             heads = hdul[0].header # type: ignore
             hdul.close()
         RA = str(heads['RA']) + ' d'
         DEC = str(heads['DEC']) + ' d'
-        time = Time(self.df_files.loc[image_int]['date_time'])
+        if iloc: time = Time(self.df_files.iloc[image_int]['date_time'])
+        else: time = Time(self.df_files.loc[image_int]['date_time'])
         loc = EarthLocation.of_site('Observatorio del Teide')
         moon_coords = get_body('moon', time = time, location = loc)
         moon_coords = SkyCoord(ra = moon_coords.ra, dec = moon_coords.dec, frame = 'icrs', unit = u.deg) # type: ignore
