@@ -151,8 +151,12 @@ class image_viewer:
                 add = True
                 if type(filters)==dict:
                     for ky in filters.keys():
-                        if filters[ky] != locals()[ky]:
-                            add = add*False
+                        if type(filters[ky]) != list:
+                            if filters[ky] != locals()[ky]:
+                                add = add*False
+                        else:
+                            if locals()[ky] not in filters[ky]:
+                                add = add*False
                         #object == filters['object'] or []:
                 if add == True:
                     date = date_time.date()
@@ -189,7 +193,10 @@ class image_viewer:
                         return
             if filters!=False and type(filters)==dict:
                 for k in filters.keys():
-                    previous_df = previous_df[previous_df[k] == filters[k]]
+                    if type(filters[k])!= list:
+                        previous_df = previous_df[previous_df[k] == filters[k]]
+                    else:
+                        previous_df = previous_df[previous_df[k].isin(filters[k])]
             if len(files_data)!=0:
                 self.df_files = pd.concat([df_files, previous_df], ignore_index = True).drop_duplicates(subset = 'filename', keep= 'last')
             else: self.df_files = previous_df
@@ -640,6 +647,8 @@ class image_viewer:
             if nrows_ncols == None:
                 if n_image <= 3: nrows_ncols = (1, n_image)
                 else: nrows_ncols = (ceil(np.sqrt(n_image)), ceil(np.sqrt(n_image)))
+            if n_image <= (nrows_ncols[0]-1)*(nrows_ncols[1]):
+                nrows_ncols = (nrows_ncols[0]-1, nrows_ncols[1])
             image_list = image
 
         # Simple image Non RGB
