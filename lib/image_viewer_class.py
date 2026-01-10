@@ -397,6 +397,12 @@ class image_viewer:
             try: kw_value = float(heads[kw])
             except: kw_value = np.nan
             return kw_value
+        # function to get date column
+        def get_date_from_datetime(d_time):
+            date = d_time.date()
+            if d_time.hour < 12 : date = date + dt.timedelta(days=-1)
+            #date = str(date)
+            return date
         #for file in self.df_files['filename']:
         if 'seeing' in label:
             self.df_files["seeing"] = self.df_files["path"].map(get_seeing_from_filename)
@@ -408,8 +414,10 @@ class image_viewer:
             self.df_files["integration"] = self.df_files["path"].map(get_integration_from_filename)
         if 'EZP' in label:
             self.df_files["EZP"] = self.df_files["path"].map(get_EZP_from_filename)
+        if 'date' in label:
+            self.df_files["date"] = self.df_files["date_time"].map(get_date_from_datetime)
         for lab in label:
-            if lab not in ['seeing', 'moon', 'moon2', 'integration', 'EZP']:
+            if lab not in ['seeing', 'moon', 'moon2', 'integration', 'EZP', 'date']:
                 self.df_files[lab] = self.df_files["path"].map(lambda x: get_kw_from_filename(x, kw = lab))
 
 
