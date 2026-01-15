@@ -1069,7 +1069,7 @@ class image_viewer:
 
     def read_data(self, image, header = False, iloc = False):
         """Method to view images."""
-        image_str, image_int = self.return_index(image) # type: ignore
+        image_str, image_int = self.return_index(image, iloc = iloc) # type: ignore
         print('Reading ', image_str)
 
         # Extracting data from header
