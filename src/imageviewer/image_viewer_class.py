@@ -1239,6 +1239,7 @@ class image_viewer:
                             min_all = self.df_files[var].min()
                             max_all = self.df_files[var].max()
                             bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
+                            print('Min filtered: %s  -  max filtered: %s  -  min all: %s  -  max all: %s  -  bins all: %s'%(min_filt, max_filt, min_all, max_all, bins_all))
                             ax[0].hist(self.df_files[var], bins = bins_all, #alpha = 0.3, 
                                        label = '$N_{all}$: %s'%len(self.df_files[var]),
                                        histtype = 'step', color ='gray')
