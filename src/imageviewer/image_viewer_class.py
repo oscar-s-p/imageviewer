@@ -1155,8 +1155,9 @@ class image_viewer:
                       'group_cols': None}
         if plotting['bool']:
             for key in plotting_kw.keys():
-                if key in plotting.keys():
+                if key not in plotting.keys():
                     plotting[key] = plotting_kw[key]
+        print(plotting)
         # Decide whether to filter values above, below or equal to each filter value
         list_filter = []
         for key in filters_dict.keys():
@@ -1170,22 +1171,40 @@ class image_viewer:
                 howto = ''
                 while howto not in ['a','b','e']:
                     try:
-                        howto = str(input('- Filtering by %s with value %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+                        howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
                     except:
                         print('Invalid input. Input must be a, b or e. Try again.')
-                        howto = str(input('- Filtering by %s with value %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+                        howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
                 list_filter.append(howto)
-                
-        print('Filtering conditions: %s'%list_filter)
-# import astroalign as aa
+        # print('Filtering conditions: %s'%list_filter)
+        df_filtered = self.df_files.copy()
+        for i, key in enumerate(filters_dict.keys()):
+            if list_filter[i] == 'a':
+                df_filtered = df_filtered[df_filtered[key]>filters_dict[key]]
+            elif list_filter[i] == 'b':
+                df_filtered = df_filtered[df_filtered[key]<filters_dict[key]]
+            elif list_filter[i] == 'e':
+                if type(filters_dict[key])!=list:
+                    df_filtered = df_filtered[df_filtered[key]==filters_dict[key]]
+                else:
+                    df_temp = pd.DataFrame()
+                    for val in filters_dict[key]:
+                        df_temp = pd.concat([df_temp, df_filtered[df_filtered[key]==val]])
+                    df_filtered = df_temp
+            else:
+                print('ERROR: unrecognized filtering condition.')
+            if len(df_filtered) == 0:
+                print('WARNING: No data left after filtering by %s'%key)
+                break
+        print('Number of files before filtering: %d'%len(self.df_files))
+        print('Number of files after filtering: %d'%len(df_filtered))
+        #if plotting['bool']:
 
-#from reproject.mosaicking import reproject_and_coadd
 
 """
 Utility functions for WCS handling and image reprojection for stacking.
 """
 
-# Defining final WCS
 def final_wcs(object, ra, dec, fov_x, fov_y, pixscale,
              name_out = "output_template.fits"):
     # Creating new folder for combined image
