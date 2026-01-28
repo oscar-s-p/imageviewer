@@ -5,6 +5,7 @@ A collection of tools for viewing and analyzing astronomical FITS images.
 """
 
 from .image_viewer_class import image_viewer
+from importlib.metadata import version as _version
 
-__version__ = "0.1.0"
+__version__ = _version("imageviewer")
 __all__ = ["image_viewer"]
