@@ -2,6 +2,8 @@
 
 A Python package for viewing and analyzing astronomical FITS images from various telescopes including the Two-Meter Twin Telescope (TTT) of Light Bridges (Tenerife, Spain), Hubble Space Telescope (HST), and Keck II.
 
+Utility functions to align and stack multiple observations of the same object are also included.
+
 ## Features
 
 - Automatic discovery and cataloging of FITS images in specified directories
@@ -11,6 +13,8 @@ A Python package for viewing and analyzing astronomical FITS images from various
 - Header information extraction
 - Moon distance calculations
 - Data manipulation and plotting utilities
+
+- Alignment and reprojection of multiple images with WCS reference frame
 
 ## Installation
 
@@ -64,7 +68,7 @@ header = viewer.header_info('image_name.fits')
 ## Methods
 
 - `return_index()`: Get image path and index
-_ `dataframe_add()`: Add columns from FITS files to the dataset
+- `dataframe_add()`: Add columns from FITS files to the dataset
 - `image_finder()`: Search for images by object, date, filter
 - `header_info()`: Display header information
 - `view_image()`: Display single or multiple FITS image
@@ -73,6 +77,11 @@ _ `dataframe_add()`: Add columns from FITS files to the dataset
 - `plotting()`: Advanced plotting with WCS coordinates (used by `view_image` and `view_RGB`)
 - `read_data()`: Read image data and headers
 - `get_moon_distance()`: Calculate angular distance to moon
+
+- Utility functions:
+    - `final_wcs`: Creates a WCS template for the stacked image
+    - `filtering_df`: Allows to filter observations on quality criteria (probably deleted from here in future versions and included as method of `image_viewer_class`)
+    - `stacking_wcs`: Use the WCS template to align and stack the desired observations after filtering
 
 ## Dependencies
 
@@ -92,7 +101,7 @@ _ `dataframe_add()`: Add columns from FITS files to the dataset
 
 ## License
 
-Ask for permission to use
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## Contact
 

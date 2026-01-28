@@ -19,16 +19,12 @@ from astropy import units as u
 from astropy.wcs import WCS
 # from astropy.wcs.wcsapi import SlicedLowLevelWCS
 from astropy.wcs.utils import skycoord_to_pixel
-from astropy.visualization import SimpleNorm, simple_norm
-from astropy.visualization import make_lupton_rgb
-from astropy.visualization.wcsaxes import add_scalebar
-from astropy.visualization.wcsaxes import SphericalCircle
-from astropy.coordinates import Angle
-from astropy.coordinates import SkyCoord
-from astropy.coordinates import get_body, EarthLocation
-from astropy.nddata import Cutout2D
+from astropy.visualization import simple_norm, make_lupton_rgb #, SimpleNorm
+from astropy.visualization.wcsaxes import add_scalebar, SphericalCircle
+from astropy.coordinates import Angle, SkyCoord, get_body, EarthLocation
+from astropy.nddata import Cutout2D, NDData
 from astropy.time import Time
-from astropy.nddata import NDData
+from astropy.stats import sigma_clip
 
 from reproject.mosaicking import find_optimal_celestial_wcs
 from reproject import reproject_interp
@@ -69,14 +65,32 @@ class image_viewer:
         return_index()
             Returns the image path and index in the datafile given one or the other.
         
+        dataframe_add()
+            Add columns from FITS files to the dataset
+        
+        image_finder()
+            Search for images by object, date, filter
+        
         header_info()
             Method to view general header info.
 
-        view()
-            Method to view images.
+        view_image()
+            Method to view single or multiple FITS images
         
-        view_multiple()
-            Method to view multiple images in subplots of a figure
+        view_RGB()
+            Method to view RGB composite images
+        
+        data_manipulation()
+            Manipulate image data (used by view_image and view_RGB)
+        
+        plotting()
+            Advanced plotting with WCS coordinates (used by view_image and view_RGB)
+        
+        read_data()
+            Read image data and headers
+        
+        get_moon_distance()
+            Calculate angular distance to moon
         """
         self.im_type_dir = {'LB': 
                                 {'data_i' : 0,
@@ -1110,3 +1124,343 @@ class image_viewer:
         return sep
 
 
+
+# import astroalign as aa
+
+#from reproject.mosaicking import reproject_and_coadd
+
+"""
+Utility functions for WCS handling and image reprojection for stacking.
+"""
+
+# Defining final WCS
+def final_wcs(object, ra, dec, fov_x, fov_y, pixscale,
+             name_out = "output_template.fits"):
+    # Creating new folder for combined image
+    if object+'_image' not in os.listdir():
+        os.system('mkdir '+object+'_image')
+        
+    ra_center, dec_center  = Angle(ra).deg, Angle(dec).deg 
+    # fov_x, fov_y, pixscale in arcsec
+    fov_x_deg, fov_y_deg = Angle(fov_x).deg, Angle(fov_y).deg
+    # Convert to degrees
+    pixscale_deg = pixscale / 3600.0
+
+    # Image size in pixels (rounded to integer)
+    naxis1 = int(np.round(fov_x_deg / pixscale_deg))
+    naxis2 = int(np.round(fov_y_deg / pixscale_deg))
+
+    print('Creating WCS:')
+    print('  Center (RA, DEC): ', 
+          Angle(ra).to_string(),
+          Angle(dec_center*u.deg).to_string())
+    print('  Size (deg): ',
+          Angle(fov_x_deg*u.deg).to_string(),
+          Angle(fov_y_deg*u.deg).to_string())
+    # Define WCS with TAN projection, north up, east left
+    w = WCS(naxis=2)
+    w.wcs.crval = [ra_center, dec_center]          # sky coord at reference pixel
+    w.wcs.crpix = [naxis1 / 2.0, naxis2 / 2.0]     # reference pixel at image center
+    w.wcs.cdelt = np.array([-pixscale_deg, pixscale_deg])  # RA decreases to the right
+    w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    w.wcs.cunit = ["deg", "deg"]
+
+    # Convert to FITS header and add NAXIS
+    hdr_out = w.to_header()
+    hdr_out["NAXIS"]  = 2
+    hdr_out["NAXIS1"] = naxis1
+    hdr_out["NAXIS2"] = naxis2
+    hdr_out["SCALE"]  = pixscale
+    
+    shape_out = (naxis2, naxis1)
+    # Empty image for later writing
+    data = np.zeros((naxis2, naxis1), dtype=float)
+    hdu = fits.PrimaryHDU(data=data, header=hdr_out)
+    hdu.writeto(object+'_image/'+name_out, overwrite=True)
+    return w, shape_out
+
+
+
+def filtering_df(iv_class, filters, plotting = False):
+    print('Filtering dataset')
+    # Filter seeing and moon distance from original dataframe
+    df_filtered = iv_class.df_files
+    df_original = iv_class.df_files
+    n_fil = len(filters)
+    mult_filters = False
+    mult_filters_n = 1
+    if 'filter' in filters.keys():
+        if n_fil!=1: n_fil = n_fil-1
+        if type(filters['filter'])!=str:
+            mult_filters = True
+            mult_filters_n = len(filters['filter'])
+    if plotting:
+        fig, ax = plt.subplots(ncols=n_fil, nrows=mult_filters_n+1, figsize=(n_fil*3,3*mult_filters_n))
+        if n_fil==1: ax = np.array([ax])
+        if mult_filters_n>1:
+            ax = ax.flatten()
+        i=0
+        ax[0].set_ylabel('All observations')
+        for fil in filters.keys():
+            if fil!='filter':
+                ax[i].hist(df_filtered[fil], bins=100)
+                ax[i].axvline(df_filtered[fil].mean(), color = 'gray', label = 'mean %s: %.3f'%(fil, df_filtered[fil].mean()))
+                ax[i].axvline(filters[fil], color = 'red', label = 'filtering value: %.3f'%(filters[fil]))
+                ax[i].set_xlabel(fil)
+                ax[i].legend()
+                #plt.suptitle('All observations statistics')
+                i+=1
+    for fil in filters.keys():
+        if fil in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS']:
+            df_filtered = df_filtered[df_filtered[fil]<filters[fil]]
+            df_filtered = df_filtered[df_filtered[fil] > 0]   
+        elif fil in ['moon', 'TESSMAG']:
+            df_filtered = df_filtered[df_filtered[fil]>filters[fil]]
+        elif fil == 'filter' and mult_filters == False:
+            df_filtered = df_filtered[df_filtered[fil]==filters[fil]]
+        elif fil == 'filter' and mult_filters == True:
+            df_list = []
+            for fi in filters[fil]:
+                df_list.append(df_filtered[df_filtered['filter']==fi])
+        else: print('ERROR: UNRECOGNIZED FILTER')
+
+    if plotting:
+        if mult_filters == False:
+            i=0
+            for fil in filters.keys():
+                if fil!='filter':
+                    ax[i].hist(df_filtered[fil].to_numpy(), bins=100)
+                    ax[i].axvline(df_filtered[fil].mean(), color = 'red', label = 'filtered mean %s: %.3f'%(fil, df_filtered[fil].mean()))
+                    ax[i].set_xlabel(fil)
+                    ax[i].legend()
+                    i+=1
+        else:
+            #fig, ax = plt.subplots(ncols=n_fil, figsize=(n_fil*3,3))
+            #if n_fil==1: ax = [ax]
+            i=0
+            for fil in filters.keys():
+                if fil!='filter':
+                    for j, df_i in enumerate(df_list):
+                        index = i + (j+1)*n_fil
+                        ax[index].hist(df_i[fil], bins=50)#, label = filters['filter'][j], alpha = 0.5)
+                        ax[index].axvline(df_i[fil].mean(), color = plt.get_cmap('tab10')(j), 
+                                      label = 'filtered mean: %.3f'%(df_i[fil].mean()))
+                        ax[index].set_xlabel(fil)
+                        ax[index].legend()
+                        ax[(j+1)*n_fil].set_ylabel('Filtered '+filters['filter'][j])
+                    i+=1
+        plt.tight_layout()
+    if mult_filters == False:
+        df_filtered.index = np.arange(len(df_filtered))
+        print('Total images after filtering: ', len(df_filtered))
+        return df_filtered
+    else:
+        for i in range(len(df_list)):
+            print('Total images after filtering in %s: %i, total time: %s s'%(filters['filter'][i], len(df_list[i]), df_list[i]['integration'].sum()))
+        return tuple(df_list)
+
+
+
+"""def stacking(df, indexes, w_out, shape_out,
+             sigma =3, min_area = 5):
+    print('Aligning and stacking images')
+    fil = df.iloc[0]['filter']
+    object = df.iloc[0]['object']
+    # Creating new folder for combined image
+    if object+'_image' not in os.listdir():
+        os.system('mkdir '+object+'_image')
+    if fil not in os.listdir(object+'_image'):
+        os.system('mkdir '+object+'_image/'+fil)
+    # Build input list for reproject: (array, WCS) pairs
+    cube = np.empty((len(indexes),) + shape_out, dtype=float)
+    for i, fn in enumerate(df.iloc[indexes]['path']):
+        with fits.open(fn) as hdul:
+            hdu = hdul[0]  # adjust if image is in another extension
+            data = hdu.data.astype(float)
+            data = data/df.loc[i]['integration']
+            wcs = WCS(hdu.header)
+        reproj, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+        if i==0: cube[0] = reproj
+        # align all to first image
+        try:
+            registered_image, _ = aa.register(reproj, cube[0],
+                                             detection_sigma = sigma,
+                                             min_area = min_area)
+            cube[i] = registered_image
+        except ValueError as e:
+            print('Cannot align index', indexes[i], ' - ', e)
+        except aa.MaxIterError as e:
+            print('Cannot align index', indexes[i], ' - ', e)
+        if i == len(indexes)//4: print('  25% done')
+        if i == len(indexes)//2: print('  50% done')
+        
+    # Sigma-clipping
+    clip = sigma_clip(cube, sigma=sigma, axis=0, masked=True)
+    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan)
+    print('\nStacking finished!')
+    return stack_sigclip"""
+
+def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
+                sig_clip = 3, add_name = '',
+                rem_sky = True, norm = False):
+    print('Aligning %i images'%(len(indexes)))
+    fil = df.iloc[0]['filter']
+    object = df.iloc[0]['object']
+    int_total = 0
+    with fits.open(object+'_image/'+template_out) as hdul:
+        hdu = hdul[0]
+        heads = hdu.header # type: ignore
+        w_out = WCS(heads)
+        shape_out = (heads["NAXIS1"], heads["NAXIS2"])
+        pixscale = heads["SCALE"]
+    # Build input list for reproject: (array, WCS) pairs
+    cube = np.empty((len(indexes),) + shape_out, dtype=float)
+    for i, fn in enumerate(df.iloc[indexes]['path']):
+        try:
+            with fits.open(fn) as hdul:
+                hdu = hdul[0]
+                head = hdu.header # type: ignore
+                data = hdu.data.astype(float) # type: ignore
+                # substract sky background
+                if rem_sky:
+                    data = data - head["FLUXSKY"]
+                data = data/df.iloc[indexes[i]]['integration']
+                # normalize counts
+                if norm:
+                    data = data / np.max(data)
+                wcs = WCS(hdu.header) # type: ignore
+            cube[i], _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+            int_total += df.iloc[indexes[i]]['integration']
+            if i == len(indexes)//4: print('  25% done')
+            if i == len(indexes)//2: print('  50% done')
+            if i == len(indexes)//(3/4): print('  75% done')
+        except Exception as error: print('%s in image %i'%(type(error).__name__, i))
+    # stacking
+    print('Stacking images')
+    clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
+    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan) # type: ignore
+    # Convert WCS to FITS header
+    hdr = w_out.to_header()
+    # Saving basic header
+    hdr['NAXIS']  = 2
+    hdr['NAXIS1'] = stack_sigclip.shape[1]
+    hdr['NAXIS2'] = stack_sigclip.shape[0]
+    hdr['SCALE'] = pixscale
+    hdr['FLUXSKY'] = np.nanmean(stack_sigclip)
+    # adding stacking parameters to header
+    hdr['n_im'] = (len(df), 'Total number of images stacked')
+    hdr['total_t'] = (df['integration'].sum(), 'Total integration time stacked')
+    hdr['avg_see'] = (df['seeing'].mean(), 'Average seeing of stacked images')
+    hdr['std_see'] = (df['seeing'].std(), 'Standard deviation of seeing')
+    # Create HDU and write to disk
+    hdu = fits.PrimaryHDU(data=stack_sigclip, header=hdr)
+    hdul = fits.HDUList([hdu])
+    hdul.writeto(object+'_image/'+df.iloc[indexes[0]]['filter']+add_name+".fits", overwrite=True)
+    
+    #fig, ax = plt.subplots()
+    #ax.imshow(stack_sigclip, origin = 'lower', norm = 'log', cmap = 'gray')
+    #return stack_sigclip, cube
+
+"""def stacking_align(df, indexes, template_out, #w_out, shape_out,
+                    ref_s,
+                    sigma = 3, min_area = 5,
+                    sig_clip = 3,
+                    show_ref = False,
+                   add_name = ''):
+    
+    with fits.open(template_out) as hdul:
+        hdu = hdul[0]
+        heads = hdu.header
+        w_out = WCS(heads)
+        shape_out = (heads["NAXIS1"], heads["NAXIS2"])
+        pixscale = heads["SCALE"]
+        
+    print('Aligning %i images'%(len(indexes)))
+    print('Finding transform to image indexes[0]')
+    # Build input list for reproject: (array, WCS) pairs
+    ref_s_c = []
+    for i, rs in enumerate(ref_s):
+        ref_s_c.append(SkyCoord(ra=rs.split()[0]+'d', dec=rs.split()[1]+'d',frame = 'icrs'))
+    cube = np.empty((len(indexes),) + shape_out, dtype=float)
+    for i, fn in enumerate(df.iloc[indexes]['path']):
+        with fits.open(fn) as hdul:
+            hdu = hdul[0]  # adjust if image is in another extension
+            data = hdu.data.astype(float)
+            data = data/df.loc[i]['integration']
+            wcs = WCS(hdu.header)
+        # Not reprojecting with WCS, only  to the first image, the resti with transformation with stars
+        # obtain pixel coordinates of ref_stars
+        ref_px = []
+        for rs in ref_s_c:
+            px_x, px_y = skycoord_to_pixel(rs, wcs)
+            ref_px.append([px_x,px_y])
+        img_pos_xy = np.array(ref_px)
+        """
+"""
+        print(img_pos_xy)
+        fig, ax = plt.subplots(figsize=(6,6))
+        ax.imshow(data, origin='lower', norm='log', cmap='gray')
+        for k, px_xy in enumerate(img_pos_xy):
+            circ = plt.Circle((px_xy[0], px_xy[1]), 20, fill=False, edgecolor=plt.get_cmap('tab10')(k), linewidth=1)
+            ax.add_patch(circ)"""
+"""
+        if i==0: 
+            reference, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+            print('Transforming images to reference WCS with selected star alignment.')
+            # obtain reference stars in px coordinates 
+            """
+"""
+            if show_ref:
+                fig, ax = plt.subplots()
+                ax.imshow(reference, origin='lower', cmap = 'gray', norm = 'log')
+                for k, px_xy in enumerate(img_pos_xy):
+                    circ = plt.Circle((px_xy[0], px_xy[1]), 20, fill=False, edgecolor=plt.get_cmap('tab10')(k), linewidth=1)
+                    ax.add_patch(circ)"""
+"""
+        # align all to first image
+        try:
+            transform, (pos_img, pos_img_rot) = aa.find_transform(img_pos_xy, reference,
+                                                                  detection_sigma = sigma,
+                                                                  min_area = min_area)
+            #print('Rotation, scale, translation : ', transform.rotation, transform.scale, transform.translation)
+            cube[i], _ = aa.apply_transform(transform, data, reference)
+            #print(data.mean())
+            #print(cube[i].mean(), cube[i].shape)
+
+        except ValueError as e:
+            print('Cannot align index', indexes[i], ' - ', e)
+        except aa.MaxIterError as e:
+            print('Cannot align index', indexes[i], ' - ', e)
+        if i == len(indexes)//4: print('  25% done')
+        if i == len(indexes)//2: print('  50% done')
+        if i == len(indexes)//(3/4): print('  75% done')
+    # stacking
+    print('Stacking images')
+    
+    clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
+    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan)
+    # Convert WCS to FITS header
+    hdr = w_out.to_header()
+    # Make sure header knows the image size
+    hdr['NAXIS']  = 2
+    hdr['NAXIS1'] = stack_sigclip.shape[1]
+    hdr['NAXIS2'] = stack_sigclip.shape[0]
+    hdr['SCALE'] = pixscale
+    hdr['FLUXSKY'] = np.mean(stack_sigclip)
+    # Create HDU and write to disk
+    hdu = fits.PrimaryHDU(data=stack_sigclip, header=hdr)
+    hdul = fits.HDUList([hdu])
+    hdul.writeto(object+'_image/'+df.loc[indexes[0]]['filter']+add_name+".fits", overwrite=True)
+    #return cube"""
+
+"""
+final_data = np.zeros((naxis1, naxis2))
+for i, fname in enumerate(df['path']):
+    #with fits.open(fname) as hdul: # type: ignore
+    #    head = hdul[0].header # type: ignore
+    #    data = hdul[0].data
+    #    hdul.close()
+    repr_data, _ = reproject_interp(fname, hdr_out, shape_out = (naxis1, naxis2))
+    repr_data = repr_data / df.loc[i]['integration']
+    final_data +=repr_data
+"""

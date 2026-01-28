@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "imageviewer"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Python package for viewing astronomical FITS images"
 authors = [{ name = "Oscar Soler", email = "osolertf@gmail.com" }]
 readme = "README.md"
@@ -20,6 +20,8 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
 dependencies = [
