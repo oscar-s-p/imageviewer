@@ -1150,14 +1150,18 @@ class image_viewer:
         '''
 
         print('Filtering dataset with: %s'%filters_dict)
-        plotting_kw = {'n_bins': 100, 
-                      'figsize': (10,5), 
-                      'group_cols': None}
+        plotting_kw = {'variable': None,
+                      'n_bins': 100, 
+                      'figsize_frame': (4,3), 
+                      'group_together': None,
+                      'group_separate': None,
+                      'plot_all': False
+                      }
         if plotting['bool']:
             for key in plotting_kw.keys():
                 if key not in plotting.keys():
                     plotting[key] = plotting_kw[key]
-        print(plotting)
+
         # Decide whether to filter values above, below or equal to each filter value
         list_filter = []
         for key in filters_dict.keys():
@@ -1192,13 +1196,46 @@ class image_viewer:
                         df_temp = pd.concat([df_temp, df_filtered[df_filtered[key]==val]])
                     df_filtered = df_temp
             else:
-                print('ERROR: unrecognized filtering condition.')
+                print('ERROR: unrecognized filtering condition. Skipping filter by \"%s\"'%key)
             if len(df_filtered) == 0:
-                print('WARNING: No data left after filtering by %s'%key)
-                break
+                print('**WARNING**: No data left after filtering by \"%s\"'%key)
+                print('Aborting filtering process...')
+                return
         print('Number of files before filtering: %d'%len(self.df_files))
         print('Number of files after filtering: %d'%len(df_filtered))
-        #if plotting['bool']:
+        if plotting['bool']:
+            # Variables to plot separately
+            if plotting['group_separate'] is not None:
+                #if plotting['group_separate'] is str: plotting['group_separate'] = [plotting['group_separate']]
+                #for group_s in plotting['group_separate']:
+                n_separate = len(df_filtered[plotting['group_separate']].unique())
+                group_separate_values = df_filtered[plotting['group_separate']].unique()
+            else: n_separate = 1
+            # Variables to plot together
+            if plotting['group_together'] is not None:
+                if plotting['group_together'] is str: plotting['group_together'] = [plotting['group_together']]
+                #n_together = len(plotting['group_together'])
+            if plotting['variable'] is None:
+                print('ERROR: To plot filtering results, please provide a variable to plot in plotting[\'variable\'].')
+                return
+            if type(plotting['variable'])== str:
+                plotting['variable'] = [plotting['variable']]
+            n_fig = len(plotting['variable'])
+            for var in plotting['variable']:
+                if var not in self.df_files.columns:
+                    print('ERROR: \"%s\" is not in the available columns: %s'%(var, self.df_files.columns))
+                else:
+                    fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
+                                           figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
+                    for j, group_s in enumerate(group_separate_values):
+                        ax[j].hist(df_filtered[var][df_filtered[plotting['group_separate']]==group_s],
+                                    bins = plotting['n_bins'], alpha = 0.7)
+                        ax[j].set_title(group_s)
+                        if plotting['plot_all']:
+                            ax[j].hist(self.df_files[var][self.df_files[plotting['group_separate']]==group_s],
+                                        bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
+                            ax[j].legend()
+            plt.show()
 
 
 """
