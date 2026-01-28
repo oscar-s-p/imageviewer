@@ -1127,8 +1127,56 @@ class image_viewer:
         sep = obj_coords.separation(moon_coords)
         return sep
 
+    
+    def filter_df(self, 
+                  filters_dict,
+                  ask_all = False,
+                  plotting = {
+                      'bool': False}
+                ):
+        '''Method to filter the dataframe and optionally plot the distributions before and after filtering.
 
+        Parameters
+        ---------
+        filters : dict
+            Dictionary with filtering conditions. Possible keys: any column in the dataset ('seeing', 'moon', 'EZP', 'DUSTPLA', 'AIRMASS', 'TESSMAG', 'filter').
+        
+        ask_all : bool, optional
+            If True, asks for how to appluy each filter (above, below or equal to the filter value).
 
+        plotting : dict, optional
+            Dictionary with plotting options. If 'bool' is True, plots the distributions before and after filtering.
+            Possible keys: 'n_bins', 'figsize', 'group_cols'.
+        '''
+
+        print('Filtering dataset with: %s'%filters_dict)
+        plotting_kw = {'n_bins': 100, 
+                      'figsize': (10,5), 
+                      'group_cols': None}
+        if plotting['bool']:
+            for key in plotting_kw.keys():
+                if key in plotting.keys():
+                    plotting[key] = plotting_kw[key]
+        # Decide whether to filter values above, below or equal to each filter value
+        list_filter = []
+        for key in filters_dict.keys():
+            if key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
+                list_filter.append('e')
+            elif key in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS'] and not ask_all:
+                list_filter.append('b')
+            elif key in ['moon', 'TESSMAG'] and not ask_all:
+                list_filter.append('a')
+            else:
+                howto = ''
+                while howto not in ['a','b','e']:
+                    try:
+                        howto = str(input('- Filtering by %s with value %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+                    except:
+                        print('Invalid input. Input must be a, b or e. Try again.')
+                        howto = str(input('- Filtering by %s with value %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+                list_filter.append(howto)
+                
+        print('Filtering conditions: %s'%list_filter)
 # import astroalign as aa
 
 #from reproject.mosaicking import reproject_and_coadd
