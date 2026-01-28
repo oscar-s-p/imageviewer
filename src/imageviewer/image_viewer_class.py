@@ -1234,14 +1234,15 @@ class image_viewer:
                             ax[0].hist(self.df_files[var], bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
                         ax[0].set_title('All data')
                         ax[0].legend()
-                    for j, group_s in enumerate(group_separate_values):
-                        ax[j].hist(df_filtered[var][df_filtered[plotting['group_separate']]==group_s],
-                                    bins = plotting['n_bins'], alpha = 0.7)
-                        ax[j].set_title(group_s)
-                        if plotting['plot_all']:
-                            ax[j].hist(self.df_files[var][self.df_files[plotting['group_separate']]==group_s],
-                                        bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
-                            ax[j].legend()
+                    else:
+                        for j, group_s in enumerate(group_separate_values):
+                            ax[j].hist(df_filtered[var][df_filtered[plotting['group_separate']]==group_s],
+                                        bins = plotting['n_bins'], alpha = 0.7)
+                            ax[j].set_title(group_s)
+                            if plotting['plot_all']:
+                                ax[j].hist(self.df_files[var][self.df_files[plotting['group_separate']]==group_s],
+                                            bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
+                                ax[j].legend()
                     ax[0].set_ylabel('Number of observations')
                     fig.suptitle('Plotting histogram of \"%s\" after filtering'%var)
             plt.show()
