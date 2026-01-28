@@ -1227,6 +1227,13 @@ class image_viewer:
                 else:
                     fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
                                            figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
+                    if plotting['group_separate'] is None:
+                        ax = [ax]
+                        ax[0].hist(df_filtered[var], bins = plotting['n_bins'], alpha = 0.7, label = 'Filtered data')
+                        if plotting['plot_all']:
+                            ax[0].hist(self.df_files[var], bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
+                        ax[0].set_title('All data')
+                        ax[0].legend()
                     for j, group_s in enumerate(group_separate_values):
                         ax[j].hist(df_filtered[var][df_filtered[plotting['group_separate']]==group_s],
                                     bins = plotting['n_bins'], alpha = 0.7)
@@ -1235,6 +1242,8 @@ class image_viewer:
                             ax[j].hist(self.df_files[var][self.df_files[plotting['group_separate']]==group_s],
                                         bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
                             ax[j].legend()
+                    ax[0].set_ylabel('Number of observations')
+                    fig.suptitle('Plotting histogram of \"%s\" after filtering'%var)
             plt.show()
 
 
