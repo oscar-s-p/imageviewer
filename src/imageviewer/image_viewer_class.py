@@ -1155,7 +1155,8 @@ class image_viewer:
                       'group_together': None,
                       'group_separate': None,
                       'plot_all': False,
-                      'x_tight': False
+                      'x_tight': False,
+                      'log': False,
                       }
         if plotting['bool']:
             for key in plotting_kw.keys():
@@ -1248,8 +1249,8 @@ class image_viewer:
                                        label = '$N_{all}$: %s'%len(self.df_files[var]),
                                        histtype = 'step', color ='gray')
                         #ax[0].set_title('All data')
-                            if plotting['x_tight']:
-                                ax[0].set_xlim(min_filt, max_filt)
+                            if plotting['x_tight']: ax[0].set_xlim(min_filt, max_filt)
+                            if plotting['log']: ax[0].set_yscale('log')
                             ax[0].legend()
                     else:
                         for j, group_s in enumerate(group_separate_values):
@@ -1267,8 +1268,8 @@ class image_viewer:
                                             bins = bins_all, #alpha = 0.3, label = 'All data')
                                             label = '$N_{all}$: %s'%len(self.df_files[var][self.df_files[plotting['group_separate']]==group_s]),
                                             histtype = 'step', color = 'gray')
-                                if plotting['x_tight']:
-                                    ax[j].set_xlim(min_filt, max_filt)
+                                if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
+                                if plotting['log']: ax[j].set_yscale('log')
                                 ax[j].legend()
                     ax[0].set_ylabel('Number of observations')
                     fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[i]], filters_dict[var]))
