@@ -1149,13 +1149,13 @@ class image_viewer:
             Possible keys: 'n_bins', 'figsize', 'group_cols'.
         '''
 
-        print('Filtering dataset with: %s'%filters_dict)
         plotting_kw = {'variable': None,
                       'n_bins': 100, 
                       'figsize_frame': (4,3), 
                       'group_together': None,
                       'group_separate': None,
-                      'plot_all': False
+                      'plot_all': False,
+                      'x_tight': False
                       }
         if plotting['bool']:
             for key in plotting_kw.keys():
@@ -1181,6 +1181,10 @@ class image_viewer:
                         howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
                 list_filter.append(howto)
         # print('Filtering conditions: %s'%list_filter)
+        print('Filtering dataset with:')
+        for i, key in enumerate(filters_dict.keys()):
+            print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
+
         df_filtered = self.df_files.copy()
         for i, key in enumerate(filters_dict.keys()):
             if list_filter[i] == 'a':
@@ -1225,7 +1229,7 @@ class image_viewer:
             n_fig = len(plotting['variable'])
             for i, var in enumerate(plotting['variable']):
                 if var not in self.df_files.columns:
-                    print('ERROR: \"%s\" is not in the available columns: %s'%(var, self.df_files.columns))
+                    print('ERROR: \"%s\" is not in the available columns: %s'%(var, self.df_files.columns.tolist()))
                 else:
                     fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
                                            figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
@@ -1244,6 +1248,8 @@ class image_viewer:
                                        label = '$N_{all}$: %s'%len(self.df_files[var]),
                                        histtype = 'step', color ='gray')
                         #ax[0].set_title('All data')
+                            if plotting['x_tight']:
+                                ax[0].set_xlim(min_filt, max_filt)
                             ax[0].legend()
                     else:
                         for j, group_s in enumerate(group_separate_values):
@@ -1261,6 +1267,8 @@ class image_viewer:
                                             bins = bins_all, #alpha = 0.3, label = 'All data')
                                             label = '$N_{all}$: %s'%len(self.df_files[var][self.df_files[plotting['group_separate']]==group_s]),
                                             histtype = 'step', color = 'gray')
+                                if plotting['x_tight']:
+                                    ax[j].set_xlim(min_filt, max_filt)
                                 ax[j].legend()
                     ax[0].set_ylabel('Number of observations')
                     fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[i]], filters_dict[var]))
