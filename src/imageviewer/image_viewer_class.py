@@ -1161,7 +1161,7 @@ class image_viewer:
             for key in plotting_kw.keys():
                 if key not in plotting.keys():
                     plotting[key] = plotting_kw[key]
-
+        howto_dict = {'a': '>', 'b': '<', 'e': '='}
         # Decide whether to filter values above, below or equal to each filter value
         list_filter = []
         for key in filters_dict.keys():
@@ -1203,6 +1203,8 @@ class image_viewer:
                 return
         print('Number of files before filtering: %d'%len(self.df_files))
         print('Number of files after filtering: %d'%len(df_filtered))
+
+        # Plotting results
         if plotting['bool']:
             # Variables to plot separately
             if plotting['group_separate'] is not None:
@@ -1221,7 +1223,7 @@ class image_viewer:
             if type(plotting['variable'])== str:
                 plotting['variable'] = [plotting['variable']]
             n_fig = len(plotting['variable'])
-            for var in plotting['variable']:
+            for i, var in enumerate(plotting['variable']):
                 if var not in self.df_files.columns:
                     print('ERROR: \"%s\" is not in the available columns: %s'%(var, self.df_files.columns))
                 else:
@@ -1229,15 +1231,25 @@ class image_viewer:
                                            figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
                     if plotting['group_separate'] is None:
                         ax = [ax]
-                        ax[0].hist(df_filtered[var], bins = plotting['n_bins'], alpha = 0.7, label = 'Filtered data')
+                        ax[0].hist(df_filtered[var], bins = plotting['n_bins'], #alpha = 0.7, 
+                                   label = '$N_{filtered}$: %s'%len(df_filtered[var]),
+                                   histtype = 'step')
                         if plotting['plot_all']:
-                            ax[0].hist(self.df_files[var], bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
-                        ax[0].set_title('All data')
-                        ax[0].legend()
+                            min_filt, max_filt = ax[j].get_xlim()
+                            min_all = self.df_files[var].min()
+                            max_all = self.df_files[var].max()
+                            bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
+                            ax[0].hist(self.df_files[var], bins = bins_all, #alpha = 0.3, 
+                                       label = '$N_{all}$: %s'%len(self.df_files[var]),
+                                       histtype = 'step', color ='gray')
+                        #ax[0].set_title('All data')
+                            ax[0].legend()
                     else:
                         for j, group_s in enumerate(group_separate_values):
                             ax[j].hist(df_filtered[var][df_filtered[plotting['group_separate']]==group_s],
-                                        bins = plotting['n_bins'], alpha = 0.7)
+                                        bins = plotting['n_bins'], #alpha = 0.7)
+                                        label = '$N_{filtered}$: %s'%len(df_filtered[var][df_filtered[plotting['group_separate']]==group_s]),
+                                        histtype = 'step')
                             ax[j].set_title(group_s)
                             if plotting['plot_all']:
                                 min_filt, max_filt = ax[j].get_xlim()
@@ -1245,10 +1257,12 @@ class image_viewer:
                                 max_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_s].max()
                                 bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
                                 ax[j].hist(self.df_files[var][self.df_files[plotting['group_separate']]==group_s],
-                                            bins = bins_all, alpha = 0.3, label = 'All data')
+                                            bins = bins_all, #alpha = 0.3, label = 'All data')
+                                            label = '$N_{all}$: %s'%len(self.df_files[var][self.df_files[plotting['group_separate']]==group_s]),
+                                            histtype = 'step', color = 'gray')
                                 ax[j].legend()
                     ax[0].set_ylabel('Number of observations')
-                    fig.suptitle('Plotting histogram of \"%s\" after filtering'%var)
+                    fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[i]], filters_dict[var]))
                     plt.tight_layout()
                     plt.show()
 
