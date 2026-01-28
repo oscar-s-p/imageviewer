@@ -1240,12 +1240,17 @@ class image_viewer:
                                         bins = plotting['n_bins'], alpha = 0.7)
                             ax[j].set_title(group_s)
                             if plotting['plot_all']:
+                                min_filt, max_filt = ax[j].get_xlim()
+                                min_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_s].min()
+                                max_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_s].max()
+                                bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
                                 ax[j].hist(self.df_files[var][self.df_files[plotting['group_separate']]==group_s],
-                                            bins = plotting['n_bins'], alpha = 0.3, label = 'All data')
+                                            bins = bins_all, alpha = 0.3, label = 'All data')
                                 ax[j].legend()
                     ax[0].set_ylabel('Number of observations')
                     fig.suptitle('Plotting histogram of \"%s\" after filtering'%var)
-            plt.show()
+                    plt.tight_layout()
+                    plt.show()
 
 
 """
