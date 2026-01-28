@@ -164,6 +164,7 @@ class image_viewer:
                         # telescope, camera, date_time, object, filter = None, None, None, None, None
                 add = True
                 if type(filters)==dict:
+                    print('Filtering found files with: %s'%filters)
                     for ky in filters.keys(): # type: ignore
                         if type(filters[ky]) != list:
                             if filters[ky] != locals()[ky]:
@@ -206,11 +207,14 @@ class image_viewer:
                         print('ERROR: unrecognized DataFrame format. Use \'.pkl\' or \'.csv\'.')
                         return
             if filters!=False and type(filters)==dict:
+                print('Filtering previous dataframe with: %s'%filters)
+                print(' - Initial length of previous df: ', len(previous_df))
                 for k in filters.keys(): # type: ignore
                     if type(filters[k])!= list:
                         previous_df = previous_df[previous_df[k] == filters[k]]
                     else:
                         previous_df = previous_df[previous_df[k].isin(filters[k])]
+                print(' - Final length of previous df: ', len(previous_df))
             if len(files_data)!=0:
                 self.df_files = pd.concat([df_files, previous_df], ignore_index = True).drop_duplicates(subset = 'filename', keep= 'last')
             else: self.df_files = previous_df
