@@ -150,7 +150,7 @@ class image_viewer:
                         # telescope, camera, date_time, object, filter = None, None, None, None, None
                 add = True
                 if type(filters)==dict:
-                    for ky in filters.keys():
+                    for ky in filters.keys(): # type: ignore
                         if type(filters[ky]) != list:
                             if filters[ky] != locals()[ky]:
                                 add = add*False
@@ -192,7 +192,7 @@ class image_viewer:
                         print('ERROR: unrecognized DataFrame format. Use \'.pkl\' or \'.csv\'.')
                         return
             if filters!=False and type(filters)==dict:
-                for k in filters.keys():
+                for k in filters.keys(): # type: ignore
                     if type(filters[k])!= list:
                         previous_df = previous_df[previous_df[k] == filters[k]]
                     else:
@@ -418,7 +418,7 @@ class image_viewer:
             self.df_files["date"] = self.df_files["date_time"].map(get_date_from_datetime)
         for lab in label:
             if lab not in ['seeing', 'moon', 'moon2', 'integration', 'EZP', 'date']:
-                self.df_files[lab] = self.df_files["path"].map(lambda x: get_kw_from_filename(x, kw = lab))
+                self.df_files[lab] = self.df_files["path"].map(lambda x: get_kw_from_filename(x, kw = lab)) # type: ignore
 
 
     def header_info(self, image,
@@ -517,7 +517,7 @@ class image_viewer:
                     return
                 else:
                     new_object = {'object' : object, 'ra' : Angle(object_coordinates[0]), 'dec' : Angle(object_coordinates[1])}
-                    self.df_grav_lens.loc[len(self.df_grav_lens)] = new_object
+                    self.df_grav_lens.loc[len(self.df_grav_lens)] = new_object # type: ignore
                     obj_int = self.df_grav_lens.index[self.df_grav_lens['object'] == object][0]
         else: obj_int = object
         if object_coordinates == None:
@@ -543,12 +543,12 @@ class image_viewer:
                 print('    - ',colors[i],': ', self.dict_filters[filters[i]])
                 filt_i = self.image_finder(obj_int, date = date, filter = self.dict_filters[filters[i]])
             else: filt_i = [i]
-            if len(filt_i) > 1:
+            if len(filt_i) > 1: # type: ignore
                 print('More than one image matching with the object, date and filter specified.')
-                for f in filt_i: print(self.df_files['filename'].loc[f])
+                for f in filt_i: print(self.df_files['filename'].loc[f]) # type: ignore
                 print('Choosing first match for RGB plot.')
             if type(name_list)==bool:
-                img_str = self.df_files['path'].loc[filt_i[0]]
+                img_str = self.df_files['path'].loc[filt_i[0]] # type: ignore
             else: img_str = name_list[i]
             self.img_str = img_str
             self.img_int = self.df_files.index[self.df_files['path']==img_str].to_list()[0]
@@ -595,21 +595,21 @@ class image_viewer:
             title_str = (r'$\bf{Object}$: %s - $\bf{Telescope}$: %s - $\bf{Date-time est}$: %s''\n'
                         r'$\bf{Camera}$: %s - $\bf{RGB Filters}$: %s|%s|%s - $\bf{Seeings}$: %.1f|%.1f|%.1f$^{\prime\prime}$''\n'
                         r'$\bf{Integrations}$: %s|%s|%s s - $\bf{SNRs}$: %s|%s|%s -  $\bf{Moon D}$: %.1fº''\n'
-                            %(self.df_files.iloc[filt_i[0]]['object'],
-                            self.df_files.iloc[filt_i[0]]['telescope'],
-                            self.df_files.iloc[filt_i[0]]['date_time'].strftime("%Y-%m-%d %H:%M"),
-                            self.df_files.iloc[filt_i[0]]['camera'],
+                            %(self.df_files.iloc[filt_i[0]]['object'],  # type: ignore
+                            self.df_files.iloc[filt_i[0]]['telescope'],  # type: ignore
+                            self.df_files.iloc[filt_i[0]]['date_time'].strftime("%Y-%m-%d %H:%M"),  # type: ignore
+                            self.df_files.iloc[filt_i[0]]['camera'],  # type: ignore
                             self.dict_filters[filters[0]], self.dict_filters[filters[1]], self.dict_filters[filters[2]],
                             (float(headers[0]['FWHM'])*float(headers[0]['SCALE'])),
                             (float(headers[1]['FWHM'])*float(headers[1]['SCALE'])),
                             (float(headers[2]['FWHM'])*float(headers[2]['SCALE'])),
                             headers[0]['INTEGT'], headers[1]['INTEGT'], headers[2]['INTEGT'],
                             headers[0]['OBJECSNR'], headers[1]['OBJECSNR'], headers[2]['OBJECSNR'],
-                            self.get_moon_distance(filt_i[0]).deg))
+                            self.get_moon_distance(filt_i[0]).deg)) # type: ignore
         else: title_str = 'RGB image'
         self.plotting(None, None, fig, axes, 0,
                         RGB = True, rgb_data = rgb_default,
-                        rgb_wcs = wcs_out, title_str = title_str,
+                        rgb_wcs = wcs_out, title_str = title_str,  # type: ignore
                         **plotting_kw)
 
 
@@ -716,7 +716,7 @@ class image_viewer:
                 vmin = heads['FLUXSKY']
                 if 'vmax' in RGB_norm_kw.keys(): vmax = RGB_norm_kw['vmax']
                 if RGB_norm_kw['max_sky'] != False: vmax = RGB_norm_kw['max_sky']*heads['FLUXSKY']
-                if vmax == None: vmax = np.max(cutout.data)
+                if vmax == None: vmax = np.max(cutout.data) # type: ignore
                 # manual normalization
                 data = (cutout.data - vmin)/(vmax-vmin)
                 data_mask = data < 1e-3
@@ -785,7 +785,7 @@ class image_viewer:
             heads = hdul[0].header # type: ignore
             heads_WCS = hdul[self.im_type_dir[im_type]['header_WCS']].header  # type: ignore
             if im_type == 'Keck II':
-                hdr = hdul[0].header # type : ignore
+                hdr = hdul[0].header # type: ignore
                 # Fix CD matrix elements: convert strings to floats
                 for key in ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']:
                     if key in hdr:
@@ -829,11 +829,11 @@ class image_viewer:
             return
         if type(zoom) == str:
             zoom = Angle(zoom)
-            size = (zoom.deg / scale * 3600, zoom.deg / scale * 3600)
+            size = (zoom.deg / scale * 3600, zoom.deg / scale * 3600)  # type: ignore
         if type(zoom)== tuple:
             if type(zoom[0]) == str:
                 zoom = (Angle(zoom[0]), Angle(zoom[1]))
-                size = (zoom[0].deg / scale * 3600,zoom[1].deg / scale * 3600) 
+                size = (zoom[0].deg / scale * 3600,zoom[1].deg / scale * 3600)  # type: ignore
         if type(zoom)==tuple:
             zoom = zoom[::-1]
             size = size[::-1]
@@ -1060,9 +1060,9 @@ class image_viewer:
             arrs = AnchoredDirectionArrows(ax.transAxes, 'E', 'N', loc='lower right',
                                            pad = 0, color=scalebar_color, frameon=False,
                                            length=-0.1, aspect_ratio=-1,
-                                           back_length=0, tail_width=0.2,
-                                           head_width=1.5, head_length=2,
-                                           sep_y = 0.02, sep_x = -0.01,
+                                           back_length=0, tail_width=0.2,  # type: ignore
+                                           head_width=1.5, head_length=2,  # type: ignore
+                                           sep_y = 0.02, sep_x = -0.01,  # type: ignore
                                            fontsize=0.03
                                            )
             ax.add_artist(arrs)
