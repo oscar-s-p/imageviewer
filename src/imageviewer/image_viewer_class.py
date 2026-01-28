@@ -1235,7 +1235,7 @@ class image_viewer:
                                    label = '$N_{filtered}$: %s'%len(df_filtered[var]),
                                    histtype = 'step')
                         if plotting['plot_all']:
-                            min_filt, max_filt = ax[j].get_xlim()
+                            min_filt, max_filt = ax[0].get_xlim()
                             min_all = self.df_files[var].min()
                             max_all = self.df_files[var].max()
                             bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
