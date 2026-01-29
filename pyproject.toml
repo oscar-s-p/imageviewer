@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "imageviewer"
-version = "0.2.21"
+version = "0.2.22"
 description = "A Python package for viewing astronomical FITS images"
 authors = [{ name = "Oscar Soler", email = "osolertf@gmail.com" }]
 readme = "README.md"
