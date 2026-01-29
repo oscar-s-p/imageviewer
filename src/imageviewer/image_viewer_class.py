@@ -1236,34 +1236,39 @@ class image_viewer:
                 else:
                     fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
                                            figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
-                    
+                    var_ext = [var]
+                    if plotting['group_together'] is not None:
+                        var_ext.append(plotting['group_together'])
+
                     if plotting['group_separate'] is None:
                         ax = [ax]
-                        df_plot = df_filtered[var]
-                        df_plot_all = self.df_files[var]
+                        df_plot = df_filtered[var_ext]
+                        df_plot_all = self.df_files[var_ext]
 
                     for j in range(n_separate):
                         if plotting['group_separate'] is not None:
-                            df_plot = df_filtered[var][df_filtered[plotting['group_separate']]==group_separate_values[j]]
-                            df_plot_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_separate_values[j]]
+                            df_plot = df_filtered[var_ext][df_filtered[plotting['group_separate']]==group_separate_values[j]]
+                            df_plot_all = self.df_files[var_ext][self.df_files[plotting['group_separate']]==group_separate_values[j]]
                             ax[j].set_title('%s: %s'%(plotting['group_separate'], group_separate_values[j]))
-                            
-                        ax[j].hist(df_plot, bins = plotting['n_bins'], 
+
+                        ax[j].hist(df_plot[var], bins = plotting['n_bins'], 
                                    label = '$N_{filtered}$: %s'%len(df_plot),
                                    histtype = 'step')
                         min_filt, max_filt = ax[j].get_xlim()
 
                         if plotting['group_together'] is not None:
                             for k in range(n_together):
+                                # TODO: FIX THIS, NOT POSSIBLE TO CHOOSE DATAFRAME LIKE THIS, COLUMN 'TELESCOPE' FOR EXAMPLE HAS ALREADY BEEN FORGOTTEN
+                                # DONE
                                 df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
-                                bins_together = int(plotting['n_bins'] * (df_plot_together.max()-df_plot_together.min())/(max_filt - min_filt))
+                                bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
                                 ax[j].hist(df_plot_together, bins = bins_together, 
                                            label = '$N_{filtered-%s}$: %s'%(group_together_values[k], len(df_plot_together)),
                                            histtype = 'step')
                         if plotting['plot_all']:
-                            min_all, max_all = df_plot_all.min(), df_plot_all.max()
+                            min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
                             bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                            ax[j].hist(df_plot_all, bins = bins_all, 
+                            ax[j].hist(df_plot_all[var], bins = bins_all, 
                                        label = '$N_{all}$: %s'%len(df_plot_all),
                                        histtype = 'step', color ='gray')
                             if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
