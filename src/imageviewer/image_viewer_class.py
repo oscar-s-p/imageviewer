@@ -1255,6 +1255,7 @@ class image_viewer:
                                    label = '$N_{filtered}$: %s'%len(df_plot),
                                    histtype = 'step')
                         min_filt, max_filt = ax[j].get_xlim()
+                        bin_width = (max_filt - min_filt)/plotting['n_bins']
 
                         if plotting['group_together'] is not None:
                             for k in range(n_together):
@@ -1262,13 +1263,15 @@ class image_viewer:
                                 # DONE
                                 df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
                                 bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
-                                ax[j].hist(df_plot_together[var], bins = bins_together, 
+                                arr_bins_together = np.arange(df_plot_together[var].min(), df_plot_together[var].max()+bin_width, bin_width)
+                                ax[j].hist(df_plot_together[var], bins = arr_bins_together, #bins_together, 
                                            label = '$N_{%s}$: %s'%(group_together_values[k], len(df_plot_together)),
                                            histtype = 'step')
                         if plotting['plot_all']:
                             min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
                             bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                            ax[j].hist(df_plot_all[var], bins = bins_all, 
+                            arr_bins_all = np.arange(min_all, max_all+bin_width, bin_width)
+                            ax[j].hist(df_plot_all[var], bins = arr_bins_all, #bins_all,
                                        label = '$N_{all}$: %s'%len(df_plot_all),
                                        histtype = 'step', color ='gray')
                             if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
