@@ -1188,7 +1188,9 @@ class image_viewer:
 
         df_filtered = self.df_files.copy()
         for i, key in enumerate(filters_dict.keys()):
-            if list_filter[i] == 'a':
+            if key not in self.df_files.columns:
+                    print('ERROR: \"%s\" is not in the available columns: %s'%(key, self.df_files.columns.tolist()))
+            elif list_filter[i] == 'a':
                 df_filtered = df_filtered[df_filtered[key]>filters_dict[key]]
             elif list_filter[i] == 'b':
                 df_filtered = df_filtered[df_filtered[key]<filters_dict[key]]
