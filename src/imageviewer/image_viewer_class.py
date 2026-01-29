@@ -1215,19 +1215,20 @@ class image_viewer:
             if plotting['group_separate'] is not None:
                 #if plotting['group_separate'] is str: plotting['group_separate'] = [plotting['group_separate']]
                 #for group_s in plotting['group_separate']:
-                n_separate = len(df_filtered[plotting['group_separate']].unique())
                 group_separate_values = df_filtered[plotting['group_separate']].unique()
+                n_separate = len(group_separate_values)
             else: n_separate = 1
             # Variables to plot together
             if plotting['group_together'] is not None:
-                if plotting['group_together'] is str: plotting['group_together'] = [plotting['group_together']]
+                #if plotting['group_together'] is str: plotting['group_together'] = [plotting['group_together']]
                 #n_together = len(plotting['group_together'])
+                group_together_values = df_filtered[plotting['group_together']].unique()
             if plotting['variable'] is None:
                 print('ERROR: To plot filtering results, please provide a variable to plot in plotting[\'variable\'].')
                 return
             if type(plotting['variable'])== str:
                 plotting['variable'] = [plotting['variable']]
-            n_fig = len(plotting['variable'])
+            #n_fig = len(plotting['variable'])
             for i, var in enumerate(plotting['variable']):
                 if var not in self.df_files.columns:
                     print('ERROR: \"%s\" is not in the available columns: %s'%(var, self.df_files.columns.tolist()))
@@ -1236,7 +1237,33 @@ class image_viewer:
                                            figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
                     if plotting['group_separate'] is None:
                         ax = [ax]
-                        ax[0].hist(df_filtered[var], bins = plotting['n_bins'], #alpha = 0.7, 
+                        df_plot = df_filtered[var]
+                        df_plot_all = self.df_files[var]
+                    # else:
+                    #     df_plot = df_filtered[var][df_filtered[plotting['group_separate']]==group_s]
+                    #     df_plot_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_s]
+                    for j in range(n_separate):
+                        if plotting['group_separate'] is not None:
+                            df_plot = df_filtered[var][df_filtered[plotting['group_separate']]==group_separate_values[j]]
+                            df_plot_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_separate_values[j]]
+                        
+                        ax[j].hist(df_plot, bins = plotting['n_bins'], #alpha = 0.7, 
+                                   label = '$N_{filtered}$: %s'%len(df_plot),
+                                   histtype = 'step')
+                        if plotting['plot_all']:
+                            min_filt, max_filt = ax[j].get_xlim()
+                            min_all, max_all = df_plot_all.min(), df_plot_all.max()
+                            bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
+                            ax[j].hist(df_plot_all, bins = bins_all, #alpha = 0.3, 
+                                       label = '$N_{all}$: %s'%len(df_plot_all),
+                                       histtype = 'step', color ='gray')
+                            if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
+                            else: ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = '%s = %f'%(var, filters_dict[var]))
+                            if plotting['log']: ax[j].set_yscale('log')
+                            ax[j].legend()
+                        ax[j].set_xlabel(var)
+                        
+                        """ax[0].hist(df_filtered[var], bins = plotting['n_bins'], #alpha = 0.7, 
                                    label = '$N_{filtered}$: %s'%len(df_filtered[var]),
                                    histtype = 'step')
                         if plotting['plot_all']:
@@ -1244,12 +1271,12 @@ class image_viewer:
                             min_all = self.df_files[var].min()
                             max_all = self.df_files[var].max()
                             bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                            print('Min filtered: %s  -  max filtered: %s  -  min all: %s  -  max all: %s  -  bins all: %s'%(min_filt, max_filt, min_all, max_all, bins_all))
                             ax[0].hist(self.df_files[var], bins = bins_all, #alpha = 0.3, 
                                        label = '$N_{all}$: %s'%len(self.df_files[var]),
                                        histtype = 'step', color ='gray')
                         #ax[0].set_title('All data')
                             if plotting['x_tight']: ax[0].set_xlim(min_filt, max_filt)
+                            else: ax[0].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = 'filtering value: %f'%(filters_dict[var]))
                             if plotting['log']: ax[0].set_yscale('log')
                             ax[0].legend()
                     else:
@@ -1269,9 +1296,11 @@ class image_viewer:
                                             label = '$N_{all}$: %s'%len(self.df_files[var][self.df_files[plotting['group_separate']]==group_s]),
                                             histtype = 'step', color = 'gray')
                                 if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
-                                else: ax[j].axvline(filters_dict[var], color = 'red', label = 'filtering value: %.3f'%(filters_dict[var]))
+                                else: ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = 'filtering value: %f'%(filters_dict[var]))
                                 if plotting['log']: ax[j].set_yscale('log')
                                 ax[j].legend()
+                    for k in range(n_separate):
+                        ax[k].set_xlabel(var)"""
                     ax[0].set_ylabel('Number of observations')
                     fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
                     plt.tight_layout()
