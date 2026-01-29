@@ -1246,7 +1246,8 @@ class image_viewer:
                         if plotting['group_separate'] is not None:
                             df_plot = df_filtered[var][df_filtered[plotting['group_separate']]==group_separate_values[j]]
                             df_plot_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_separate_values[j]]
-
+                            ax[j].set_title('%s: %s'%(plotting['group_separate'], group_separate_values[j]))
+                            
                         ax[j].hist(df_plot, bins = plotting['n_bins'], 
                                    label = '$N_{filtered}$: %s'%len(df_plot),
                                    histtype = 'step')
@@ -1266,7 +1267,7 @@ class image_viewer:
                                        label = '$N_{all}$: %s'%len(df_plot_all),
                                        histtype = 'step', color ='gray')
                             if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
-                            else: ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
+                            else: ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
                             if plotting['log']: ax[j].set_yscale('log')
                             ax[j].legend()
                         ax[j].set_xlabel(var)
