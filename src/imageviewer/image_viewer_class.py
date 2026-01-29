@@ -1273,6 +1273,7 @@ class image_viewer:
                                 if plotting['log']: ax[j].set_yscale('log')
                                 ax[j].legend()
                     ax[0].set_ylabel('Number of observations')
+                    print(np.argwhere(filters_dict.keys()==var))
                     fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[np.argwhere(filters_dict.keys()==var)]], filters_dict[var]))
                     plt.tight_layout()
                     plt.show()
