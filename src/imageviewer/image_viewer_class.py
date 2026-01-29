@@ -1127,182 +1127,186 @@ class image_viewer:
         sep = obj_coords.separation(moon_coords)
         return sep
 
-    
-    def filter_df(self, 
-                  filters_dict,
-                  ask_all = False,
-                  plotting = {
-                      'bool': False}
-                ):
-        '''Method to filter the dataframe and optionally plot the distributions before and after filtering.
-
-        Parameters
-        ---------
-        filters : dict
-            Dictionary with filtering conditions. Possible keys: any column in the dataset ('seeing', 'moon', 'EZP', 'DUSTPLA', 'AIRMASS', 'TESSMAG', 'filter').
-        
-        ask_all : bool, optional
-            If True, asks for how to appluy each filter (above, below or equal to the filter value).
-
-        plotting : dict, optional
-            Dictionary with plotting options. If 'bool' is True, plots the distributions before and after filtering.
-            Possible keys: 'n_bins', 'figsize', 'group_cols'.
-        '''
-
-        plotting_kw = {'variable': None,
-                      'n_bins': 100, 
-                      'figsize_frame': (4,3), 
-                      'group_together': None,
-                      'group_separate': None,
-                      'plot_all': False,
-                      'x_tight': False,
-                      'log': False,
-                      }
-        if plotting['bool']:
-            for key in plotting_kw.keys():
-                if key not in plotting.keys():
-                    plotting[key] = plotting_kw[key]
-        howto_dict = {'a': '>', 'b': '<', 'e': '='}
-        # Decide whether to filter values above, below or equal to each filter value
-        list_filter = []
-        for key in filters_dict.keys():
-            if type(filters_dict[key]) is tuple:
-                list_filter.append('ab')
-            elif key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
-                list_filter.append('e')
-            elif key in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS'] and not ask_all:
-                list_filter.append('b')
-            elif key in ['moon', 'TESSMAG'] and not ask_all:
-                list_filter.append('a')
-            else:
-                howto = ''
-                while howto not in ['a','b','e', 'ab']:
-                    try:
-                        howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
-                    except:
-                        print('Invalid input. Input must be a, b or e. Try again.')
-                        howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
-                list_filter.append(howto)
-
-        print('Filtering dataset with:')
-        for i, key in enumerate(filters_dict.keys()):
-            if type(filters_dict[key]) is tuple:
-                print(' - %s < %s < %s'%(filters_dict[key][0], key, filters_dict[key][1]))
-            else:
-                print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
-
-        df_filtered = self.df_files.copy()
-        for i, key in enumerate(filters_dict.keys()):
-            if key not in self.df_files.columns:
-                    print('ERROR: \"%s\" is not in the available columns: %s'%(key, self.df_files.columns.tolist()))
-            elif list_filter[i] == 'a':
-                df_filtered = df_filtered[df_filtered[key]>filters_dict[key]]
-            elif list_filter[i] == 'b':
-                df_filtered = df_filtered[df_filtered[key]<filters_dict[key]]
-            elif list_filter[i] == 'ab':
-                df_filtered = df_filtered[(df_filtered[key]> filters_dict[key][0]) & (df_filtered[key]< filters_dict[key][1])]
-            elif list_filter[i] == 'e':
-                if type(filters_dict[key])!=list:
-                    df_filtered = df_filtered[df_filtered[key]==filters_dict[key]]
-                else:
-                    df_temp = pd.DataFrame()
-                    for val in filters_dict[key]:
-                        df_temp = pd.concat([df_temp, df_filtered[df_filtered[key]==val]])
-                    df_filtered = df_temp
-            else:
-                print('ERROR: unrecognized filtering condition. Skipping filter by \"%s\"'%key)
-            if len(df_filtered) == 0:
-                print('**WARNING**: No data left after filtering by \"%s\"'%key)
-                print('Aborting filtering process...')
-                return
-        print('Number of files before filtering: %d'%len(self.df_files))
-        print('Number of files after filtering: %d'%len(df_filtered))
-
-        # Plotting results
-        if plotting['bool']:
-            # Variables to plot separately
-            if plotting['group_separate'] is not None:
-                group_separate_values = df_filtered[plotting['group_separate']].unique()
-                n_separate = len(group_separate_values)
-            else: n_separate = 1
-            # Variables to plot together
-            if plotting['group_together'] is not None:
-                group_together_values = df_filtered[plotting['group_together']].unique()
-                n_together = len(group_together_values)
-            if plotting['variable'] is None:
-                print('ERROR: To plot filtering results, please provide a variable to plot in plotting[\'variable\'].')
-                return
-            if type(plotting['variable'])== str:
-                plotting['variable'] = [plotting['variable']]
-            for i, var in enumerate(plotting['variable']):
-                if var not in self.df_files.columns:
-                    print('ERROR: \"%s\" is not in the available columns: %s'%(var, self.df_files.columns.tolist()))
-                else:
-                    fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
-                                           figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
-                    var_ext = [var]
-                    if plotting['group_together'] is not None:
-                        var_ext.append(plotting['group_together'])
-
-                    if plotting['group_separate'] is None:
-                        ax = [ax]
-                        df_plot = df_filtered[var_ext]
-                        df_plot_all = self.df_files[var_ext]
-
-                    for j in range(n_separate):
-                        if plotting['group_separate'] is not None:
-                            df_plot = df_filtered[var_ext][df_filtered[plotting['group_separate']]==group_separate_values[j]]
-                            df_plot_all = self.df_files[var_ext][self.df_files[plotting['group_separate']]==group_separate_values[j]]
-                            ax[j].set_title('%s: %s'%(plotting['group_separate'], group_separate_values[j]))
-
-                        ax[j].hist(df_plot[var], bins = plotting['n_bins'], 
-                                   label = '$N_{filtered}$: %s'%len(df_plot),
-                                   histtype = 'step')
-                        min_filt, max_filt = ax[j].get_xlim()
-                        bin_width = (max_filt - min_filt)/plotting['n_bins']
-
-                        if plotting['group_together'] is not None:
-                            for k in range(n_together):
-                                df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
-                                bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
-                                arr_bins_together = np.arange(df_plot_together[var].min(), df_plot_together[var].max()+bin_width, bin_width)
-                                ax[j].hist(df_plot_together[var], bins = arr_bins_together, 
-                                           label = '$N_{%s}$: %s'%(group_together_values[k], len(df_plot_together)),
-                                           histtype = 'step')
-                        if plotting['plot_all']:
-                            min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
-                            bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                            arr_bins_all = np.arange(min_all, max_all+bin_width, bin_width)
-                            ax[j].hist(df_plot_all[var], bins = arr_bins_all, 
-                                       label = '$N_{all}$: %s'%len(df_plot_all),
-                                       histtype = 'step', color ='gray')
-                            if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
-                            else: 
-                                if var in filters_dict.keys(): 
-                                    if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
-                                        ax[j].axvline(filters_dict[var][0], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][0]))
-                                        ax[j].axvline(filters_dict[var][1], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][1]))
-                                    else:
-                                        ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
-                            if plotting['log']: ax[j].set_yscale('log')
-                            ax[j].legend()
-                        ax[j].set_xlabel(var)
-                        
-                    ax[0].set_ylabel('Number of observations')
-                    if var in filters_dict.keys():
-                        if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
-                            fig.suptitle('Filtering \"%s\" between %s and %s'%(var, filters_dict[var][0], filters_dict[var][1]))
-                        else:
-                            fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
-                    else:
-                        fig.suptitle('Plotting \"%s\" after filtering'%var)
-                    plt.tight_layout()
-                    plt.show()
 
 
 """
 Utility functions for WCS handling and image reprojection for stacking.
 """
+
+
+def filter_df(original_df, 
+            filters_dict,
+            ask_all = False,
+            plotting = {
+                'bool': False}
+        ):
+    '''Method to filter the dataframe and optionally plot the distributions before and after filtering.
+
+    Parameters
+    ---------
+    filters : dict
+        Dictionary with filtering conditions. Possible keys: any column in the dataset ('seeing', 'moon', 'EZP', 'DUSTPLA', 'AIRMASS', 'TESSMAG', 'filter').
+
+    ask_all : bool, optional
+        If True, asks for how to appluy each filter (above, below or equal to the filter value).
+
+    plotting : dict, optional
+        Dictionary with plotting options. If 'bool' is True, plots the distributions before and after filtering.
+        Possible keys: 'n_bins', 'figsize', 'group_cols'.
+    '''
+
+    plotting_kw = {'variable': None,
+                    'n_bins': 100, 
+                    'figsize_frame': (4,3), 
+                    'group_together': None,
+                    'group_separate': None,
+                    'plot_all': False,
+                    'x_tight': False,
+                    'log': False,
+                    }
+    if plotting['bool']:
+        for key in plotting_kw.keys():
+            if key not in plotting.keys():
+                plotting[key] = plotting_kw[key]
+    howto_dict = {'a': '>', 'b': '<', 'e': '='}
+    # Decide whether to filter values above, below or equal to each filter value
+    list_filter = []
+    for key in filters_dict.keys():
+        if type(filters_dict[key]) is tuple:
+            list_filter.append('ab')
+        elif key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
+            list_filter.append('e')
+        elif key in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS'] and not ask_all:
+            list_filter.append('b')
+        elif key in ['moon', 'TESSMAG'] and not ask_all:
+            list_filter.append('a')
+        else:
+            howto = ''
+            while howto not in ['a','b','e', 'ab']:
+                try:
+                    howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+                except:
+                    print('Invalid input. Input must be a, b or e. Try again.')
+                    howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+            list_filter.append(howto)
+
+    print('Filtering dataset with:')
+    for i, key in enumerate(filters_dict.keys()):
+        if type(filters_dict[key]) is tuple:
+            print(' - %s < %s < %s'%(filters_dict[key][0], key, filters_dict[key][1]))
+        else:
+            print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
+
+    df_filtered = original_df.copy()
+    for i, key in enumerate(filters_dict.keys()):
+        if key not in original_df.columns:
+                print('ERROR: \"%s\" is not in the available columns: %s'%(key, original_df.columns.tolist()))
+        elif list_filter[i] == 'a':
+            df_filtered = df_filtered[df_filtered[key]>filters_dict[key]]
+        elif list_filter[i] == 'b':
+            df_filtered = df_filtered[df_filtered[key]<filters_dict[key]]
+        elif list_filter[i] == 'ab':
+            df_filtered = df_filtered[(df_filtered[key]> filters_dict[key][0]) & (df_filtered[key]< filters_dict[key][1])]
+        elif list_filter[i] == 'e':
+            if type(filters_dict[key])!=list:
+                df_filtered = df_filtered[df_filtered[key]==filters_dict[key]]
+            else:
+                df_temp = pd.DataFrame()
+                for val in filters_dict[key]:
+                    df_temp = pd.concat([df_temp, df_filtered[df_filtered[key]==val]])
+                df_filtered = df_temp
+        else:
+            print('ERROR: unrecognized filtering condition. Skipping filter by \"%s\"'%key)
+        if len(df_filtered) == 0:
+            print('**WARNING**: No data left after filtering by \"%s\"'%key)
+            print('Aborting filtering process...')
+            return
+    print('Number of files before filtering: %d'%len(original_df))
+    print('Number of files after filtering: %d'%len(df_filtered))
+
+    # Plotting results
+    if plotting['bool']:
+        # Variables to plot separately
+        if plotting['group_separate'] is not None:
+            group_separate_values = df_filtered[plotting['group_separate']].unique()
+            n_separate = len(group_separate_values)
+        else: n_separate = 1
+        # Variables to plot together
+        if plotting['group_together'] is not None:
+            group_together_values = df_filtered[plotting['group_together']].unique()
+            n_together = len(group_together_values)
+        if plotting['variable'] is None:
+            print('ERROR: To plot filtering results, please provide a variable to plot in plotting[\'variable\'].')
+            return
+        if type(plotting['variable'])== str:
+            plotting['variable'] = [plotting['variable']]
+        for i, var in enumerate(plotting['variable']):
+            if var not in original_df.columns:
+                print('ERROR: \"%s\" is not in the available columns: %s'%(var, original_df.columns.tolist()))
+            else:
+                fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
+                                        figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
+                var_ext = [var]
+                if plotting['group_together'] is not None:
+                    var_ext.append(plotting['group_together'])
+
+                if plotting['group_separate'] is None:
+                    ax = [ax]
+                    df_plot = df_filtered[var_ext]
+                    df_plot_all = original_df[var_ext]
+
+                for j in range(n_separate):
+                    if plotting['group_separate'] is not None:
+                        df_plot = df_filtered[var_ext][df_filtered[plotting['group_separate']]==group_separate_values[j]]
+                        df_plot_all = original_df[var_ext][original_df[plotting['group_separate']]==group_separate_values[j]]
+                        ax[j].set_title('%s: %s'%(plotting['group_separate'], group_separate_values[j]))
+
+                    ax[j].hist(df_plot[var], bins = plotting['n_bins'], 
+                                label = '$N_{filtered}$: %s'%len(df_plot),
+                                histtype = 'step')
+                    min_filt, max_filt = ax[j].get_xlim()
+                    bin_width = (max_filt - min_filt)/plotting['n_bins']
+
+                    if plotting['group_together'] is not None:
+                        for k in range(n_together):
+                            df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
+                            bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
+                            arr_bins_together = np.arange(df_plot_together[var].min(), df_plot_together[var].max()+bin_width, bin_width)
+                            ax[j].hist(df_plot_together[var], bins = arr_bins_together, 
+                                        label = '$N_{%s}$: %s'%(group_together_values[k], len(df_plot_together)),
+                                        histtype = 'step')
+                    if plotting['plot_all']:
+                        min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
+                        bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
+                        arr_bins_all = np.arange(min_all, max_all+bin_width, bin_width)
+                        ax[j].hist(df_plot_all[var], bins = arr_bins_all, 
+                                    label = '$N_{all}$: %s'%len(df_plot_all),
+                                    histtype = 'step', color ='gray')
+                        if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
+                        else: 
+                            if var in filters_dict.keys(): 
+                                if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
+                                    ax[j].axvline(filters_dict[var][0], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][0]))
+                                    ax[j].axvline(filters_dict[var][1], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][1]))
+                                else:
+                                    ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
+                        if plotting['log']: ax[j].set_yscale('log')
+                        ax[j].legend()
+                    ax[j].set_xlabel(var)
+                    
+                ax[0].set_ylabel('Number of observations')
+                if var in filters_dict.keys():
+                    if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
+                        fig.suptitle('Filtering %s < \"%s\" < %s'%(filters_dict[var][0], var, filters_dict[var][1]))
+                    else:
+                        fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
+                else:
+                    fig.suptitle('Plotting \"%s\" after filtering'%var)
+                plt.tight_layout()
+                plt.show()
+
+    return df_filtered
+
 
 def final_wcs(object, ra, dec, fov_x, fov_y, pixscale,
              name_out = "output_template.fits"):
@@ -1350,7 +1354,7 @@ def final_wcs(object, ra, dec, fov_x, fov_y, pixscale,
     return w, shape_out
 
 
-
+"""
 def filtering_df(iv_class, filters, plotting = False):
     print('Filtering dataset')
     # Filter seeing and moon distance from original dataframe
@@ -1428,7 +1432,7 @@ def filtering_df(iv_class, filters, plotting = False):
         for i in range(len(df_list)):
             print('Total images after filtering in %s: %i, total time: %s s'%(filters['filter'][i], len(df_list[i]), df_list[i]['integration'].sum()))
         return tuple(df_list)
-
+"""
 
 
 """def stacking(df, indexes, w_out, shape_out,
