@@ -1186,7 +1186,10 @@ class image_viewer:
         # print('Filtering conditions: %s'%list_filter)
         print('Filtering dataset with:')
         for i, key in enumerate(filters_dict.keys()):
-            print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
+            if type(filters_dict[key]) not in [int, float, str]:
+                print(' - %s < %s < %s'%(filters_dict[key][0], key, filters_dict[key][1]))
+            else:
+                print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
 
         df_filtered = self.df_files.copy()
         for i, key in enumerate(filters_dict.keys()):
