@@ -1166,7 +1166,7 @@ class image_viewer:
         # Decide whether to filter values above, below or equal to each filter value
         list_filter = []
         for key in filters_dict.keys():
-            if type(filters_dict[key]) not in [int, float, str]:
+            if type(filters_dict[key]) is tuple:
                 list_filter.append('ab')
             elif key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
                 list_filter.append('e')
@@ -1183,10 +1183,10 @@ class image_viewer:
                         print('Invalid input. Input must be a, b or e. Try again.')
                         howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
                 list_filter.append(howto)
-        # print('Filtering conditions: %s'%list_filter)
+
         print('Filtering dataset with:')
         for i, key in enumerate(filters_dict.keys()):
-            if type(filters_dict[key]) not in [int, float, str]:
+            if type(filters_dict[key]) is tuple:
                 print(' - %s < %s < %s'%(filters_dict[key][0], key, filters_dict[key][1]))
             else:
                 print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
@@ -1222,15 +1222,11 @@ class image_viewer:
         if plotting['bool']:
             # Variables to plot separately
             if plotting['group_separate'] is not None:
-                #if plotting['group_separate'] is str: plotting['group_separate'] = [plotting['group_separate']]
-                #for group_s in plotting['group_separate']:
                 group_separate_values = df_filtered[plotting['group_separate']].unique()
                 n_separate = len(group_separate_values)
             else: n_separate = 1
             # Variables to plot together
             if plotting['group_together'] is not None:
-                #if plotting['group_together'] is str: plotting['group_together'] = [plotting['group_together']]
-                #n_together = len(plotting['group_together'])
                 group_together_values = df_filtered[plotting['group_together']].unique()
                 n_together = len(group_together_values)
             if plotting['variable'] is None:
@@ -1238,7 +1234,6 @@ class image_viewer:
                 return
             if type(plotting['variable'])== str:
                 plotting['variable'] = [plotting['variable']]
-            #n_fig = len(plotting['variable'])
             for i, var in enumerate(plotting['variable']):
                 if var not in self.df_files.columns:
                     print('ERROR: \"%s\" is not in the available columns: %s'%(var, self.df_files.columns.tolist()))
@@ -1268,19 +1263,17 @@ class image_viewer:
 
                         if plotting['group_together'] is not None:
                             for k in range(n_together):
-                                # TODO: FIX THIS, NOT POSSIBLE TO CHOOSE DATAFRAME LIKE THIS, COLUMN 'TELESCOPE' FOR EXAMPLE HAS ALREADY BEEN FORGOTTEN
-                                # DONE
                                 df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
                                 bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
                                 arr_bins_together = np.arange(df_plot_together[var].min(), df_plot_together[var].max()+bin_width, bin_width)
-                                ax[j].hist(df_plot_together[var], bins = arr_bins_together, #bins_together, 
+                                ax[j].hist(df_plot_together[var], bins = arr_bins_together, 
                                            label = '$N_{%s}$: %s'%(group_together_values[k], len(df_plot_together)),
                                            histtype = 'step')
                         if plotting['plot_all']:
                             min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
                             bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
                             arr_bins_all = np.arange(min_all, max_all+bin_width, bin_width)
-                            ax[j].hist(df_plot_all[var], bins = arr_bins_all, #bins_all,
+                            ax[j].hist(df_plot_all[var], bins = arr_bins_all, 
                                        label = '$N_{all}$: %s'%len(df_plot_all),
                                        histtype = 'step', color ='gray')
                             if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
