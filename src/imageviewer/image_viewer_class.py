@@ -1223,6 +1223,7 @@ class image_viewer:
                 #if plotting['group_together'] is str: plotting['group_together'] = [plotting['group_together']]
                 #n_together = len(plotting['group_together'])
                 group_together_values = df_filtered[plotting['group_together']].unique()
+                n_together = len(group_together_values)
             if plotting['variable'] is None:
                 print('ERROR: To plot filtering results, please provide a variable to plot in plotting[\'variable\'].')
                 return
@@ -1235,72 +1236,41 @@ class image_viewer:
                 else:
                     fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
                                            figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
+                    
                     if plotting['group_separate'] is None:
                         ax = [ax]
                         df_plot = df_filtered[var]
                         df_plot_all = self.df_files[var]
-                    # else:
-                    #     df_plot = df_filtered[var][df_filtered[plotting['group_separate']]==group_s]
-                    #     df_plot_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_s]
+
                     for j in range(n_separate):
                         if plotting['group_separate'] is not None:
                             df_plot = df_filtered[var][df_filtered[plotting['group_separate']]==group_separate_values[j]]
                             df_plot_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_separate_values[j]]
-                        
-                        ax[j].hist(df_plot, bins = plotting['n_bins'], #alpha = 0.7, 
+
+                        ax[j].hist(df_plot, bins = plotting['n_bins'], 
                                    label = '$N_{filtered}$: %s'%len(df_plot),
                                    histtype = 'step')
+                        min_filt, max_filt = ax[j].get_xlim()
+
+                        if plotting['group_together'] is not None:
+                            for k in range(n_together):
+                                df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
+                                bins_together = int(plotting['n_bins'] * (df_plot_together.max()-df_plot_together.min())/(max_filt - min_filt))
+                                ax[j].hist(df_plot_together, bins = bins_together, 
+                                           label = '$N_{filtered-%s}$: %s'%(group_together_values[k], len(df_plot_together)),
+                                           histtype = 'step')
                         if plotting['plot_all']:
-                            min_filt, max_filt = ax[j].get_xlim()
                             min_all, max_all = df_plot_all.min(), df_plot_all.max()
                             bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                            ax[j].hist(df_plot_all, bins = bins_all, #alpha = 0.3, 
+                            ax[j].hist(df_plot_all, bins = bins_all, 
                                        label = '$N_{all}$: %s'%len(df_plot_all),
                                        histtype = 'step', color ='gray')
                             if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
-                            else: ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = '%s = %f'%(var, filters_dict[var]))
+                            else: ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
                             if plotting['log']: ax[j].set_yscale('log')
                             ax[j].legend()
                         ax[j].set_xlabel(var)
                         
-                        """ax[0].hist(df_filtered[var], bins = plotting['n_bins'], #alpha = 0.7, 
-                                   label = '$N_{filtered}$: %s'%len(df_filtered[var]),
-                                   histtype = 'step')
-                        if plotting['plot_all']:
-                            min_filt, max_filt = ax[0].get_xlim()
-                            min_all = self.df_files[var].min()
-                            max_all = self.df_files[var].max()
-                            bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                            ax[0].hist(self.df_files[var], bins = bins_all, #alpha = 0.3, 
-                                       label = '$N_{all}$: %s'%len(self.df_files[var]),
-                                       histtype = 'step', color ='gray')
-                        #ax[0].set_title('All data')
-                            if plotting['x_tight']: ax[0].set_xlim(min_filt, max_filt)
-                            else: ax[0].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = 'filtering value: %f'%(filters_dict[var]))
-                            if plotting['log']: ax[0].set_yscale('log')
-                            ax[0].legend()
-                    else:
-                        for j, group_s in enumerate(group_separate_values):
-                            ax[j].hist(df_filtered[var][df_filtered[plotting['group_separate']]==group_s],
-                                        bins = plotting['n_bins'], #alpha = 0.7)
-                                        label = '$N_{filtered}$: %s'%len(df_filtered[var][df_filtered[plotting['group_separate']]==group_s]),
-                                        histtype = 'step')
-                            ax[j].set_title(group_s)
-                            if plotting['plot_all']:
-                                min_filt, max_filt = ax[j].get_xlim()
-                                min_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_s].min()
-                                max_all = self.df_files[var][self.df_files[plotting['group_separate']]==group_s].max()
-                                bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                                ax[j].hist(self.df_files[var][self.df_files[plotting['group_separate']]==group_s],
-                                            bins = bins_all, #alpha = 0.3, label = 'All data')
-                                            label = '$N_{all}$: %s'%len(self.df_files[var][self.df_files[plotting['group_separate']]==group_s]),
-                                            histtype = 'step', color = 'gray')
-                                if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
-                                else: ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.5, alpha = 0.5,label = 'filtering value: %f'%(filters_dict[var]))
-                                if plotting['log']: ax[j].set_yscale('log')
-                                ax[j].legend()
-                    for k in range(n_separate):
-                        ax[k].set_xlabel(var)"""
                     ax[0].set_ylabel('Number of observations')
                     fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
                     plt.tight_layout()
