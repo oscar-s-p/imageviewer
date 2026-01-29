@@ -1262,8 +1262,8 @@ class image_viewer:
                                 # DONE
                                 df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
                                 bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
-                                ax[j].hist(df_plot_together, bins = bins_together, 
-                                           label = '$N_{filtered-%s}$: %s'%(group_together_values[k], len(df_plot_together)),
+                                ax[j].hist(df_plot_together[var], bins = bins_together, 
+                                           label = '$N_{%s}$: %s'%(group_together_values[k], len(df_plot_together)),
                                            histtype = 'step')
                         if plotting['plot_all']:
                             min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
