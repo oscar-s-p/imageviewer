@@ -1269,10 +1269,11 @@ class image_viewer:
                                             label = '$N_{all}$: %s'%len(self.df_files[var][self.df_files[plotting['group_separate']]==group_s]),
                                             histtype = 'step', color = 'gray')
                                 if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
+                                else: ax[j].axvline(filters_dict[var], color = 'red', label = 'filtering value: %.3f'%(filters_dict[var]))
                                 if plotting['log']: ax[j].set_yscale('log')
                                 ax[j].legend()
                     ax[0].set_ylabel('Number of observations')
-                    fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[i]], filters_dict[var]))
+                    fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[np.argwhere(filters_dict.keys()==var)]], filters_dict[var]))
                     plt.tight_layout()
                     plt.show()
 
