@@ -1282,14 +1282,22 @@ class image_viewer:
                                        histtype = 'step', color ='gray')
                             if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
                             else: 
-                                if var in filters_dict.keys(): ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
+                                if var in filters_dict.keys(): 
+                                    if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
+                                        ax[j].axvline(filters_dict[var][0], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][0]))
+                                        ax[j].axvline(filters_dict[var][1], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][1]))
+                                    else:
+                                        ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
                             if plotting['log']: ax[j].set_yscale('log')
                             ax[j].legend()
                         ax[j].set_xlabel(var)
                         
                     ax[0].set_ylabel('Number of observations')
                     if var in filters_dict.keys():
-                        fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
+                        if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
+                            fig.suptitle('Filtering \"%s\" between %s and %s'%(var, filters_dict[var][0], filters_dict[var][1]))
+                        else:
+                            fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
                     else:
                         fig.suptitle('Plotting \"%s\" after filtering'%var)
                     plt.tight_layout()
