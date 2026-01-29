@@ -1166,7 +1166,9 @@ class image_viewer:
         # Decide whether to filter values above, below or equal to each filter value
         list_filter = []
         for key in filters_dict.keys():
-            if key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
+            if type(filters_dict[key]) not in [int, float, str]:
+                list_filter.append('ab')
+            elif key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
                 list_filter.append('e')
             elif key in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS'] and not ask_all:
                 list_filter.append('b')
@@ -1174,7 +1176,7 @@ class image_viewer:
                 list_filter.append('a')
             else:
                 howto = ''
-                while howto not in ['a','b','e']:
+                while howto not in ['a','b','e', 'ab']:
                     try:
                         howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
                     except:
@@ -1194,6 +1196,8 @@ class image_viewer:
                 df_filtered = df_filtered[df_filtered[key]>filters_dict[key]]
             elif list_filter[i] == 'b':
                 df_filtered = df_filtered[df_filtered[key]<filters_dict[key]]
+            elif list_filter[i] == 'ab':
+                df_filtered = df_filtered[(df_filtered[key]> filters_dict[key][0]) & (df_filtered[key]< filters_dict[key][1])]
             elif list_filter[i] == 'e':
                 if type(filters_dict[key])!=list:
                     df_filtered = df_filtered[df_filtered[key]==filters_dict[key]]
