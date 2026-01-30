@@ -1551,8 +1551,8 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
                             method='average',  # Weighted after clip
                             weights=weights,
                             sigma_clip=True,
-                            sigma_clip_low_thresh=3.0,
-                            sigma_clip_high_thresh=3.0,
+                            sigma_clip_low_thresh=sig_clip,
+                            sigma_clip_high_thresh=sig_clip,
                             sigma_clip_func=np.ma.median,
                             sigma_clip_dev_func=mad_std    # Robust std (import from astropy.stats)
                         )
