@@ -24,10 +24,12 @@ from astropy.visualization.wcsaxes import add_scalebar, SphericalCircle
 from astropy.coordinates import Angle, SkyCoord, get_body, EarthLocation
 from astropy.nddata import Cutout2D, NDData
 from astropy.time import Time
-from astropy.stats import sigma_clip
+from astropy.stats import sigma_clip, sigma_clipped_stats, mad_std
 
 from reproject.mosaicking import find_optimal_celestial_wcs
 from reproject import reproject_interp
+
+import ccdproc as ccdp
 
 
 
@@ -444,7 +446,8 @@ class image_viewer:
                                         'RA', 'DEC', 'NAXIS1', 'NAXIS2', 'SCALE', 'FOVX', 'FOVY',
                                         'CCW', 'CRPIX1', 'CRPIX2', 'FWHM'],
                     hdul_i = 0,
-                    iloc = False
+                    iloc = False,
+                    return_value = False,
                                         ):
         """Method to view general header info.
         
@@ -457,6 +460,15 @@ class image_viewer:
         interesting_keys: list / 'all'
             list - list of strings with header keyword \n
             'all' - will print the whole header
+
+        hdul_i : int
+            Index of the HDU to read the header from.
+
+        iloc : bool
+            Wether the ``image`` parameter is an iloc index (True) or loc index (False).
+
+        return_value : bool
+            Wether to return the header object or not.
         """
         image_str, image_int = self.return_index(image, iloc = iloc) # type: ignore
         
@@ -481,6 +493,9 @@ class image_viewer:
         except:
             print('WARNING: WRONG interesting_keys PARAMETER.')
             print('         Header parameter not recognized. Try the string \'all\' to view the full header')
+        
+        if return_value:
+            return heads[interesting_keys[0]]
 
 
     def view_RGB(self, object, date,
@@ -1270,6 +1285,7 @@ def filter_df(original_df,
                     if plotting['group_together'] is not None:
                         for k in range(n_together):
                             df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
+                            #TODO: ERROR here when there are no rows of one of the combinations of groupt together and separate (filter and camera to test)
                             bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
                             arr_bins_together = np.arange(df_plot_together[var].min(), df_plot_together[var].max()+bin_width, bin_width)
                             ax[j].hist(df_plot_together[var], bins = arr_bins_together, 
@@ -1478,6 +1494,13 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
                 sig_clip = 3, add_name = '',
                 rem_sky = True, norm = False):
     print('Aligning %i images'%(len(indexes)))
+    cam_dict = {'QHY411-1': {'rdnoise': 1.8, 'gain': 0.41, 'scale': 0.141},
+                'QHY411-2': {'rdnoise': 1.81, 'gain': 0.41, 'scale': 0.142},
+                'QHY411-3': {'rdnoise': 1.81, 'gain': 0.41, 'scale': 0.598},
+                'QHY600-3': {'rdnoise': 1.68, 'gain': 0.33, 'scale': 0.192},
+                'QHY600-4': {'rdnoise': 1.68, 'gain': 0.33, 'scale': 0.141},
+                'iKon936-1': {'rdnoise': 6.2, 'gain': 1, 'scale': 0.23}}
+
     fil = df.iloc[0]['filter']
     object = df.iloc[0]['object']
     int_total = 0
@@ -1489,6 +1512,7 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
         pixscale = heads["SCALE"]
     # Build input list for reproject: (array, WCS) pairs
     cube = np.empty((len(indexes),) + shape_out, dtype=float)
+    weights = np.empty((len(indexes)))
     for i, fn in enumerate(df.iloc[indexes]['path']):
         try:
             with fits.open(fn) as hdul:
@@ -1496,8 +1520,16 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
                 head = hdu.header # type: ignore
                 data = hdu.data.astype(float) # type: ignore
                 # substract sky background
+                sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=3.0, maxiters=5)
                 if rem_sky:
-                    data = data - head["FLUXSKY"]
+                    data = data - sky_mean #head["FLUXSKY"]
+                # now data is in ADU without sky
+                # convert to electrons
+                cam_i_dict = cam_dict[df.iloc[indexes[i]]['camera']]
+                data = data / cam_i_dict['gain']
+                # calculate weights
+                weights[i] = 1.0 / ((sky_std/cam_i_dict['gain'])**2 + (cam_i_dict['rdnoise'] / df.iloc[indexes[i]]['integration'])**2)
+                # normalize by integration time
                 data = data/df.iloc[indexes[i]]['integration']
                 # normalize counts
                 if norm:
@@ -1511,8 +1543,20 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
         except Exception as error: print('%s in image %i'%(type(error).__name__, i))
     # stacking
     print('Stacking images')
-    clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
-    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan) # type: ignore
+    """clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
+    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan) # type: ignore"""
+    # weighted average with sigma clipping
+    stack = ccdp.combine(
+                            cube,
+                            method='average',  # Weighted after clip
+                            weights=weights,
+                            sigma_clip=True,
+                            sigma_clip_low_thresh=3.0,
+                            sigma_clip_high_thresh=3.0,
+                            sigma_clip_func=np.ma.median,
+                            sigma_clip_dev_func=mad_std    # Robust std (import from astropy.stats)
+                        )
+    stack_sigclip = stack.data
     # Convert WCS to FITS header
     hdr = w_out.to_header()
     # Saving basic header
