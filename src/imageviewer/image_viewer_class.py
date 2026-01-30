@@ -1521,28 +1521,31 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
                 hdu = hdul[0]
                 head = hdu.header # type: ignore
                 data = hdu.data.astype(float) # type: ignore
-                # substract sky background
-                if print_tests: print('sigma clip stats')
-                sky_mean, _, sky_std = sigma_clipped_stats(data, sigma=3.0, maxiters=5, cenfunc=np.mean)
-                if rem_sky:
-                    data = data - sky_mean #head["FLUXSKY"]
-                # now data is in ADU without sky
-                # convert to electrons
-                if print_tests: print('converting electrons')
-                cam_i_dict = cam_dict[df.iloc[indexes[i]]['camera']]
-                data = data / cam_i_dict['gain']
-                # calculate weights
-                if print_tests: print('calculating weights')
-                weights[i] = 1.0 / ((sky_std/cam_i_dict['gain'])**2 + (cam_i_dict['rdnoise'] / df.iloc[indexes[i]]['integration'])**2)
-                # normalize by integration time
-                if print_tests: print('normalizing by integration time')
-                data = data/df.iloc[indexes[i]]['integration']
-                # normalize counts
-                if norm:
-                    data = data / np.max(data)
                 wcs = WCS(hdu.header) # type: ignore
+            
             if print_tests: print('reprojecting')
-            cube[i], _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+            data_r, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+            # substract sky background
+            if print_tests: print('sigma clip stats')
+            sky_mean, _, sky_std = sigma_clipped_stats(data_r, sigma=3.0, maxiters=5, cenfunc=np.mean)
+            if rem_sky:
+                data_r = data_r - sky_mean #head["FLUXSKY"]
+            # now data is in ADU without sky
+            # convert to electrons
+            if print_tests: print('converting electrons')
+            cam_i_dict = cam_dict[df.iloc[indexes[i]]['camera']]
+            data_r = data_r / cam_i_dict['gain']
+            # calculate weights
+            if print_tests: print('calculating weights')
+            weights[i] = 1.0 / ((sky_std/cam_i_dict['gain'])**2 + (cam_i_dict['rdnoise'] / df.iloc[indexes[i]]['integration'])**2)
+            # normalize by integration time
+            if print_tests: print('normalizing by integration time')
+            data_r = data_r / df.iloc[indexes[i]]['integration']
+            # normalize counts
+            if norm:
+                data_r = data_r / np.max(data_r)
+                
+            cube[i] = data_r
             #int_total += df.iloc[indexes[i]]['integration']
             if i == len(indexes)//4: print('  25% done')
             if i == len(indexes)//2: print('  50% done')
