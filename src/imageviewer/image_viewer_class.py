@@ -1492,7 +1492,8 @@ def filtering_df(iv_class, filters, plotting = False):
 
 def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
                 sig_clip = 3, add_name = '',
-                rem_sky = True, norm = False):
+                rem_sky = True, norm = False,
+                print_tests = False):
     print('Aligning %i images'%(len(indexes)))
     cam_dict = {'QHY411-1': {'rdnoise': 1.8, 'gain': 0.41, 'scale': 0.141},
                 'QHY411-2': {'rdnoise': 1.81, 'gain': 0.41, 'scale': 0.142},
@@ -1503,7 +1504,7 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
 
     fil = df.iloc[0]['filter']
     object = df.iloc[0]['object']
-    int_total = 0
+    #int_total = 0
     with fits.open(object+'_image/'+template_out) as hdul:
         hdu = hdul[0]
         heads = hdu.header # type: ignore
@@ -1516,27 +1517,33 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
     for i, fn in enumerate(df.iloc[indexes]['path']):
         try:
             with fits.open(fn) as hdul:
+                if print_tests: print('opening')
                 hdu = hdul[0]
                 head = hdu.header # type: ignore
                 data = hdu.data.astype(float) # type: ignore
                 # substract sky background
+                if print_tests: print('sigma clip stats')
                 sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=3.0, maxiters=5)
                 if rem_sky:
                     data = data - sky_mean #head["FLUXSKY"]
                 # now data is in ADU without sky
                 # convert to electrons
+                if print_tests: print('converting electrons')
                 cam_i_dict = cam_dict[df.iloc[indexes[i]]['camera']]
                 data = data / cam_i_dict['gain']
                 # calculate weights
+                if print_tests: print('calculating weights')
                 weights[i] = 1.0 / ((sky_std/cam_i_dict['gain'])**2 + (cam_i_dict['rdnoise'] / df.iloc[indexes[i]]['integration'])**2)
                 # normalize by integration time
+                if print_tests: print('normalizing by integration time')
                 data = data/df.iloc[indexes[i]]['integration']
                 # normalize counts
                 if norm:
                     data = data / np.max(data)
                 wcs = WCS(hdu.header) # type: ignore
+            if print_tests: print('reprojecting')
             cube[i], _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
-            int_total += df.iloc[indexes[i]]['integration']
+            #int_total += df.iloc[indexes[i]]['integration']
             if i == len(indexes)//4: print('  25% done')
             if i == len(indexes)//2: print('  50% done')
             if i == len(indexes)//(3/4): print('  75% done')
@@ -1570,6 +1577,7 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
     hdr['total_t'] = (df['integration'].sum(), 'Total integration time stacked')
     hdr['avg_see'] = (df['seeing'].mean(), 'Average seeing of stacked images')
     hdr['std_see'] = (df['seeing'].std(), 'Standard deviation of seeing')
+    hdr['filter'] = fil
     # Create HDU and write to disk
     hdu = fits.PrimaryHDU(data=stack_sigclip, header=hdr)
     hdul = fits.HDUList([hdu])
