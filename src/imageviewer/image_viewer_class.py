@@ -22,7 +22,7 @@ from astropy.wcs.utils import skycoord_to_pixel
 from astropy.visualization import simple_norm, make_lupton_rgb #, SimpleNorm
 from astropy.visualization.wcsaxes import add_scalebar, SphericalCircle
 from astropy.coordinates import Angle, SkyCoord, get_body, EarthLocation
-from astropy.nddata import Cutout2D, NDData
+from astropy.nddata import Cutout2D, NDData, CCDData
 from astropy.time import Time
 from astropy.stats import sigma_clip, sigma_clipped_stats, mad_std
 
@@ -1523,7 +1523,7 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
                 data = hdu.data.astype(float) # type: ignore
                 # substract sky background
                 if print_tests: print('sigma clip stats')
-                sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=3.0, maxiters=5)
+                sky_mean, _, sky_std = sigma_clipped_stats(data, sigma=3.0, maxiters=5, cenfunc=np.mean)
                 if rem_sky:
                     data = data - sky_mean #head["FLUXSKY"]
                 # now data is in ADU without sky
@@ -1549,12 +1549,19 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
             if i == len(indexes)//(3/4): print('  75% done')
         except Exception as error: print('%s in image %i'%(type(error).__name__, i))
     # stacking
+    if print_tests: print('Creating CCD list')
+    # Create CCDData list (no disk I/O)
+    ccds = []
+    for i, (data, w) in enumerate(zip(cube, weights)):
+        ccd = CCDData(data, unit='electron/s')  # No header/WCS needed for combine
+        ccd.header['STACKWT'] = w  
+        ccds.append(ccd)
     print('Stacking images')
     """clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
     stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan) # type: ignore"""
     # weighted average with sigma clipping
     stack = ccdp.combine(
-                            cube,
+                            ccds,
                             method='average',  # Weighted after clip
                             weights=weights,
                             sigma_clip=True,
