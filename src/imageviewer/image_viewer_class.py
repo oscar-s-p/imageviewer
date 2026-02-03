@@ -195,6 +195,7 @@ class image_viewer:
                 
         if len(files_data)==0:
             print('WARNING: NO IMAGE FILES FOUND')
+            df_files = pd.DataFrame()
             #return
         # creation of dataframe
         if len(files_data)!=0:
