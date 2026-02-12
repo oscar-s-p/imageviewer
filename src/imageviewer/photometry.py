@@ -69,58 +69,63 @@ def detect_sources(filename,
     bkg = sky_mean
     data_sub = data - bkg
     print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
-    # sky_mean, sky_median, sky_std = sigma_clipped_stats(data_sub, sigma=sky_sigma, maxiters=maxiters)
-    # print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
-    
-    if 'FWHM'  in header:
-        fwhm = header['FWHM']
-    elif 'seeing' in header:
-        fwhm = header['seeing'] / header['SCALE']
-    else:
-        print("FWHM not found in header. Using input value fwhm = %s."%fwhm)
+        # sky_mean, sky_median, sky_std = sigma_clipped_stats(data_sub, sigma=sky_sigma, maxiters=maxiters)
+        # print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
+    if init_table is None:
+        print('No initial table provided. Will perform source detection on the image.')
+        
+        if 'FWHM'  in header:
+            fwhm = header['FWHM']
+        elif 'seeing' in header:
+            fwhm = header['seeing'] / header['SCALE']
+        else:
+            print("FWHM not found in header. Using input value fwhm = %s."%fwhm)
 
-    print('FWHM used for source detection: %s pixels'%fwhm)
+        print('FWHM used for source detection: %s pixels'%fwhm)
 
-    # Source detection
-    if init_table is None and method == 'IRAF':
-        print('No initial table provided. Using IRAFStarFinder for source detection.')
-        threshold_iraf =  (sky_std * sky_threshold)
-        print('- IRAFStarFinder threshold: %s'%threshold_iraf)
-        iraf_finder = IRAFStarFinder(threshold=threshold_iraf, fwhm=fwhm)
-        print('Detecting sources...')
-        iraf_stars = iraf_finder(data_sub)
-        print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
-        # sorting list of found stars
-        iraf_stars.sort('flux', reverse = True)
-        iraf_stars['flux_id'] = 0
-        iraf_stars['r_pix'] = 0
-        for i in range(len(iraf_stars)): 
-            iraf_stars[i]['flux_id'] = i
-            iraf_stars[i]['r_pix'] = np.sqrt(iraf_stars[i]['npix'])
-        init_table = iraf_stars
-        # init_table['x'] = init_table['xcentroid']
-        # init_table['y'] = init_table['ycentroid']
-        xlab, ylab = 'x_centroid', 'y_centroid'
+        # Source detection
+        if method == 'IRAF':
+            print('No initial table provided. Using IRAFStarFinder for source detection.')
+            threshold_iraf =  (sky_std * sky_threshold)
+            print('- IRAFStarFinder threshold: %s'%threshold_iraf)
+            iraf_finder = IRAFStarFinder(threshold=threshold_iraf, fwhm=fwhm)
+            print('Detecting sources...')
+            iraf_stars = iraf_finder(data_sub)
+            print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
+            # sorting list of found stars
+            iraf_stars.sort('flux', reverse = True)
+            iraf_stars['flux_id'] = 0
+            iraf_stars['r_pix'] = 0
+            for i in range(len(iraf_stars)): 
+                iraf_stars[i]['flux_id'] = i
+                iraf_stars[i]['r_pix'] = np.sqrt(iraf_stars[i]['npix'])
+            init_table = iraf_stars
+            # init_table['x'] = init_table['xcentroid']
+            # init_table['y'] = init_table['ycentroid']
+            
 
-    elif init_table is None and method == 'find_peaks':
-        print('No initial table provided. Using find_peaks for source detection.')
-        threshold_fp = (sky_std * sky_threshold)
-        print('- find_peaks threshold: %s'%threshold_fp)
-        print('Detecting sources...')
-        fp_sources = find_peaks(data_sub, threshold=threshold_fp, 
-                                box_size=int(fwhm),
-                                wcs = WCS(header))
-        print('- Sources found by find_peaks: %d'%len(fp_sources))
+        elif method == 'find_peaks':
+            print('No initial table provided. Using find_peaks for source detection.')
+            threshold_fp = (sky_std * sky_threshold)
+            print('- find_peaks threshold: %s'%threshold_fp)
+            print('Detecting sources...')
+            fp_sources = find_peaks(data_sub, threshold=threshold_fp, 
+                                    box_size=int(fwhm),
+                                    wcs = WCS(header))
+            print('- Sources found by find_peaks: %d'%len(fp_sources))
 
-        init_table = fp_sources
-        xlab, ylab = 'x_peak', 'y_peak'
+            init_table = fp_sources
+        
+    if method =='IRAF': xlab, ylab = 'x_centroid', 'y_centroid'
+    elif method == 'find_peaks': xlab, ylab = 'x_peak', 'y_peak'
+    else: xlab, ylab = 'x', 'y'
 
     if plot:
         fig,ax = plt.subplots()
         ax.imshow(data_sub, 
             cmap = 'gray', origin = 'lower',
-            vmin = sky_mean - (sky_std * sky_threshold),
-            vmax = sky_mean + sky_std * sky_threshold,
+            vmin =  (sky_std * sky_threshold),
+            vmax =  sky_std * sky_threshold,
             )
         ax.scatter(init_table[xlab], init_table[ylab], 
                    marker='x', color='red', s=20)
