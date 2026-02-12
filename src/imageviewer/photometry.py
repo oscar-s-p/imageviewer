@@ -99,11 +99,9 @@ def detect_sources(filename,
             for i in range(len(iraf_stars)): 
                 iraf_stars[i]['flux_id'] = i
                 iraf_stars[i]['r_pix'] = np.sqrt(iraf_stars[i]['npix'])
-            init_table = iraf_stars
-            # init_table['x'] = init_table['xcentroid']
-            # init_table['y'] = init_table['ycentroid']
+            detect_table = iraf_stars
+            xlab, ylab = 'xcentroid', 'ycentroid'
             
-
         elif method == 'find_peaks':
             print('No initial table provided. Using find_peaks for source detection.')
             threshold_fp = (sky_std * sky_threshold)
@@ -112,47 +110,67 @@ def detect_sources(filename,
             fp_sources = find_peaks(data_sub, threshold=threshold_fp, 
                                     box_size=int(fwhm),
                                     wcs = WCS(header))
-            print('- Sources found by find_peaks: %d'%len(fp_sources))
+            print('- Sources found by find_peaks: %d'%len(fp_sources)) # type: ignore
+            detect_table = fp_sources
+            xlab, ylab = 'x_peak', 'y_peak'
 
-            init_table = fp_sources
+        else:
+            print('\nNo method for source detection provided.')
+            print(' - Available methods: "IRAF" and "find_peaks".')
+            detect_table = Table({'x': [], 'y': []}, dtype=[float, float])
         
-    if method =='IRAF': xlab, ylab = 'x_centroid', 'y_centroid'
-    elif method == 'find_peaks': xlab, ylab = 'x_peak', 'y_peak'
-    else: xlab, ylab = 'x', 'y'
+    else: 
+        print('Initial table provided. Skipping source detection on the image.')
+        xlab, ylab = 'x', 'y'
+        detect_table = init_table
+
+    # if init_table is None and method in ['IRAF', 'find_peaks']:
+    #     x, y = np.asarray(detect_table[xlab]), np.asarray(detect_table[ylab]) # type: ignore
+    #     xy_stars = Table({'x': x, 'y': y})
+    # elif init_table is not None:
+    #     x, y = np.asarray(init_table[xlab]), np.asarray(init_table[ylab]) # type: ignore
+    #     xy_stars = Table({'x': x, 'y': y})
+    # else:
+    #     print('No initial table provided and no method for source detection. Returning empty table.')
+    #     xy_stars = Table({'x': [], 'y': []}, dtype=[float, float])
+    xy_stars = Table({'x': np.asarray(detect_table[xlab]), 'y': np.asarray(detect_table[ylab])}) # type: ignore
 
     if plot:
         fig,ax = plt.subplots()
         ax.imshow(data_sub, 
             cmap = 'gray', origin = 'lower',
-            vmin =  (sky_std * sky_threshold),
+            vmin =  -(sky_std * sky_threshold),
             vmax =  sky_std * sky_threshold,
             )
-        ax.scatter(init_table[xlab], init_table[ylab], 
-                   marker='x', color='red', s=20)
-        ax.set_title('Detected sources')
+        if len(xy_stars) > 0:
+            ax.scatter(xy_stars['x'], xy_stars['y'], # type: ignore
+                    marker='x', color='red', s=20)
+        ax.set_title('Detected sources: %d'%len(xy_stars))
         # plt.show()
 
         if add_sources:
             # Collecting clicked coordinates
             print('Click on the image to add sources. Close the image when done.')
-            coords = []
+            #coords = []
             def onclick(event):
                 if event.inaxes != ax or event.xdata is None or event.ydata is None:
                     return
                 x, y = event.xdata, event.ydata
-                coords.append((x, y))
+                xy_stars.add_row([x, y])
                 ax.plot(x, y, 'bx', markersize=10)
+                ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
                 fig.canvas.draw_idle()
 
             fig.canvas.mpl_connect('button_press_event', onclick)
 
-            ax.set_title('Click to add sources')
-            plt.show(block=False)
-            coords = plt.ginput(n=-1, timeout=0)
-            print(f'Added {len(coords)} sources.')
-            plt.close(fig)
-
-    if add_sources:
-        return init_table, coords
-    else:
-        return init_table
+            # ax.set_title('Click to add sources')
+            # plt.show(block=False)
+            # coords = plt.ginput(n=-1, timeout=0)
+            # print(f'Added {len(coords)} sources.')
+            # plt.close(fig)
+    
+    return xy_stars
+    # if add_sources:
+    #     return init_table, coords
+    # else:
+    #     return init_table, None
