@@ -151,6 +151,7 @@ def detect_sources(filename,
         if add_sources:
             # Collecting clicked coordinates
             print('Click on the image to add sources. Close the image when done.')
+            ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
             #coords = []
             def onclick(event):
                 if event.inaxes != ax or event.xdata is None or event.ydata is None:
