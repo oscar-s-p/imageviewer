@@ -20,7 +20,7 @@ from astroquery.sdss import SDSS
 from astroquery.vizier import Vizier
 
 import photutils.psf as psf
-from photutils.detection import IRAFStarFinder
+from photutils.detection import IRAFStarFinder, find_peaks
 
 from scipy.spatial import cKDTree
 
@@ -49,6 +49,7 @@ def photo_analysis(filename,
     return None
 
 def detect_sources(filename, 
+                   method = 'find_peaks',
                    sky_sigma = 3.0,
                    maxiters = 5,
                    sky_threshold = 3.0,
@@ -68,8 +69,8 @@ def detect_sources(filename,
     bkg = sky_mean
     data_sub = data - bkg
     print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
-    sky_mean, sky_median, sky_std = sigma_clipped_stats(data_sub, sigma=sky_sigma, maxiters=maxiters)
-    print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
+    # sky_mean, sky_median, sky_std = sigma_clipped_stats(data_sub, sigma=sky_sigma, maxiters=maxiters)
+    # print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
     
     if 'FWHM'  in header:
         fwhm = header['FWHM']
@@ -81,9 +82,9 @@ def detect_sources(filename,
     print('FWHM used for source detection: %s pixels'%fwhm)
 
     # Source detection
-    if init_table is None:
+    if init_table is None and method == 'IRAF':
         print('No initial table provided. Using IRAFStarFinder for source detection.')
-        threshold_iraf = sky_mean + (sky_std * sky_threshold)
+        threshold_iraf =  (sky_std * sky_threshold)
         print('- IRAFStarFinder threshold: %s'%threshold_iraf)
         iraf_finder = IRAFStarFinder(threshold=threshold_iraf, fwhm=fwhm)
         print('Detecting sources...')
@@ -96,8 +97,23 @@ def detect_sources(filename,
         for i in range(len(iraf_stars)): 
             iraf_stars[i]['flux_id'] = i
             iraf_stars[i]['r_pix'] = np.sqrt(iraf_stars[i]['npix'])
-        
         init_table = iraf_stars
+        # init_table['x'] = init_table['xcentroid']
+        # init_table['y'] = init_table['ycentroid']
+        xlab, ylab = 'x_centroid', 'y_centroid'
+
+    elif init_table is None and method == 'find_peaks':
+        print('No initial table provided. Using find_peaks for source detection.')
+        threshold_fp = (sky_std * sky_threshold)
+        print('- find_peaks threshold: %s'%threshold_fp)
+        print('Detecting sources...')
+        fp_sources = find_peaks(data_sub, threshold=threshold_fp, 
+                                box_size=int(fwhm),
+                                wcs = WCS(header))
+        print('- Sources found by find_peaks: %d'%len(fp_sources))
+
+        init_table = fp_sources
+        xlab, ylab = 'x_peak', 'y_peak'
 
     if plot:
         fig,ax = plt.subplots()
@@ -106,17 +122,17 @@ def detect_sources(filename,
             vmin = sky_mean - (sky_std * sky_threshold),
             vmax = sky_mean + sky_std * sky_threshold,
             )
-        ax.scatter(init_table['xcentroid'], init_table['ycentroid'], 
+        ax.scatter(init_table[xlab], init_table[ylab], 
                    marker='x', color='red', s=20)
         ax.set_title('Detected sources')
-        plt.show()
+        # plt.show()
 
         if add_sources:
             # Collecting clicked coordinates
             print('Click on the image to add sources. Close the image when done.')
             coords = []
             def onclick(event):
-                if event.inaxes != ax:
+                if event.inaxes != ax or event.xdata is None or event.ydata is None:
                     return
                 x, y = event.xdata, event.ydata
                 coords.append((x, y))
@@ -125,4 +141,13 @@ def detect_sources(filename,
 
             fig.canvas.mpl_connect('button_press_event', onclick)
 
-    return init_table
+            ax.set_title('Click to add sources')
+            plt.show(block=False)
+            coords = plt.ginput(n=-1, timeout=0)
+            print(f'Added {len(coords)} sources.')
+            plt.close(fig)
+
+    if add_sources:
+        return init_table, coords
+    else:
+        return init_table
