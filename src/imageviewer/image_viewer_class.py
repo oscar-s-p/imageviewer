@@ -166,7 +166,7 @@ class image_viewer:
                         # telescope, camera, date_time, object, filter = None, None, None, None, None
                 add = True
                 if type(filters)==dict:
-                    print('Filtering found files with: %s'%filters)
+                    if k==0: print('Filtering found files with: %s'%filters)
                     for ky in filters.keys(): # type: ignore
                         if type(filters[ky]) != list:
                             if filters[ky] != locals()[ky]:
