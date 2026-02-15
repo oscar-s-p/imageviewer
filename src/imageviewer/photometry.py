@@ -39,11 +39,11 @@ def photo_analysis(filename,
                                        'qfit_filter': 8, 'cfit_filter': 0.05},
                    catalogue = 'PanSTARRS',
                    matching_params = {'mag_range': (13, 18), 'max_sep_pix': 5},
-                   plot = True,
+                   plot = True, n_fig_init = 0,
                    stacked = False,
                    print_info = True,
                    ):
-    n_fig = 0
+    n_fig = n_fig_init
     phot_tables = []
     sky = {'mean':[], 'std':[]}
     #e_dict = {'error':[], 'B':[], 'n_im':[], 'avg_t':[],'sum1':[], 'sum2':[]}
