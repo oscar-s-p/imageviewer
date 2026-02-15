@@ -4,12 +4,17 @@ Photometric analysis functions:
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredDirectionArrows
+import ipywidgets as widgets
+from IPython.display import display
+
+from reproject.mosaicking import find_optimal_celestial_wcs
+from reproject import reproject_interp
 
 import pandas as pd
 from typing import cast
 
 from astropy.io import fits
-from astropy.stats import sigma_clipped_stats
+from astropy.stats import sigma_clipped_stats, sigma_clip
 from astropy.table import Table, vstack
 from astropy.wcs.utils import skycoord_to_pixel
 from astropy.wcs import WCS
@@ -30,11 +35,13 @@ from scipy.spatial import cKDTree
 def photo_analysis(filename,
                    init_table = None,
                    sky_background = {'sigma': 3.0, 'maxiters': 5, 'sky_threshold': 3.0},
-                   phtometry_params = {'psf_fwhm_shape': 3.0, 'aperture_fwhm': 3.0, 'fitter_maxiters': 100,
+                   photometry_params = {'psf_fwhm_shape': 3.0, 'aperture_fwhm': 3.0, 'fitter_maxiters': 100,
                                        'qfit_filter': 8, 'cfit_filter': 0.05},
                    catalogue = 'PanSTARRS',
+                   matching_params = {'mag_range': (13, 18), 'max_sep_pix': 5},
                    plot = True,
                    stacked = False,
+                   print_info = True,
                    ):
     n_fig = 0
     phot_tables = []
@@ -55,14 +62,16 @@ def photo_analysis(filename,
         wcs = WCS(header)
 
     fil = header['FILTER'] if 'FILTER' in header else 'Unknown filter'
+    
+    print('\n-----------------------------------------------------------')
+    print('Photometric analysis of image %s'%(filename))
 
     # Background estimation and substraction
-    print('Removing sky background...')
+    if print_info: print('Removing sky background...')
     sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=sky_background['sigma'], maxiters=sky_background['maxiters'])
     bkg = sky_mean
     data_sub = data - bkg
-    print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
-
+    if print_info: print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
     sky['mean'].append(sky_mean)
     sky['std'].append(sky_std)
 
@@ -82,7 +91,7 @@ def photo_analysis(filename,
         print('Initial table should have columns "x" and "y". Please check the format of the initial table.')
         return None
     
-    print('Initial number of star coordinates looked at: %i'%len(init_table))
+    if print_info: print('Initial number of star coordinates looked at: %i'%len(init_table))
 
     # Defining sky area to search in SDSS catalogue
     center = [Angle(header['CRVAL1'], u.deg), Angle(header['CRVAL2'], u.deg)]
@@ -94,18 +103,19 @@ def photo_analysis(filename,
     # RA/Dec bounding box
     ra_range = [corners_sky.ra.min().value, corners_sky.ra.max().value] # type: ignore
     dec_range = [corners_sky.dec.min().value, corners_sky.dec.max().value] # type: ignore
-    print('Sky area observed in RA, DEC (deg): ', ra_range, dec_range)
+    if print_info: print('Sky area observed in RA, DEC (deg): ', ra_range, dec_range)
     
     if catalogue == 'SDSS':
         # Query SDSS with the sky area, obtain psfMag values for interest filters
-        sdss_table = SDSS.query_region(sc_center,                               # type: ignore
+        cat_table = SDSS.query_region(sc_center,                               # type: ignore
                                     width = (ra_range[1]-ra_range[0])*u.deg,
                                     height = (dec_range[1]-dec_range[0])*u.deg,
                                     fields=['ra','dec', 'psfMag_g', 'psfMag_r', 'psfMag_i']
                                     )
-        print('Found %i stars catalogued in SDSS in the field'%len(sdss_table))
+        if print_info: print('Found %i stars catalogued in SDSS in the field'%len(cat_table))
         # Transforming obtained sky coordinates of stars to pixels in the image
-        cat_px = skycoord_to_pixel(SkyCoord(sdss_table['ra'], sdss_table['dec'], unit='deg'), wcs)
+        cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs)
+        cat_labels = ['ra', 'dec', 'psfMag_'+fil[-1]]
     
     elif catalogue == 'PanSTARRS':
         # Query Vizier for panstarrs1
@@ -116,17 +126,19 @@ def photo_analysis(filename,
                                     catalog = 'II/349/ps1'
                                     #fields=['ra','dec', 'gmag', 'rmag', 'imag']
                                     )
-        pstr_table = pstr['II/349/ps1']['RAJ2000', 'DEJ2000', 'gmag', 'rmag', 'imag']
-        cat_px = skycoord_to_pixel(SkyCoord(pstr_table['RAJ2000'], pstr_table['DEJ2000'], unit='deg'), wcs)
-        print('Found %i stars catalogued in Panstarr in the field'%len(pstr_table))
+        cat_table = pstr['II/349/ps1']['RAJ2000', 'DEJ2000', 'gmag', 'rmag', 'imag']
+        cat_px = skycoord_to_pixel(SkyCoord(cat_table['RAJ2000'], cat_table['DEJ2000'], unit='deg'), wcs)
+        if print_info: print('Found %i stars catalogued in Panstarr in the field'%len(cat_table))
+        cat_labels = ['ra', 'dec', fil[-1]+'mag']
 
     elif catalogue == 'Simbad':
         # Query Simbad for stars in the field
         custom_simbad = Simbad()
         custom_simbad.add_votable_fields('ra(d)', 'dec(d)', 'g', 'r', 'i', 'z')
-        simbad_table = custom_simbad.query_region(sc_center, radius=Angle(np.max([ra_range[1]-ra_range[0], dec_range[1]-dec_range[0]])/2, u.deg))
-        print('Found %i stars catalogued in Simbad in the field'%len(simbad_table))
-        cat_px = skycoord_to_pixel(SkyCoord(simbad_table['ra'], simbad_table['dec'], unit='deg'), wcs)
+        cat_table = custom_simbad.query_region(sc_center, radius=Angle(np.max([ra_range[1]-ra_range[0], dec_range[1]-dec_range[0]])/2, u.deg))
+        if print_info: print('Found %i stars catalogued in Simbad in the field'%len(cat_table))
+        cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs)
+        cat_labels = ['ra', 'dec', fil[-1]]
     else:
         print('No catalogue provided. Available catalogues: "SDSS" and "PanSTARRS".')
         return None
@@ -154,42 +166,47 @@ def photo_analysis(filename,
         plt.tight_layout()
         plt.show()
 
-    print('\n---------------------------------------------------')
-    print('\nPhotometry of image %s'%(filename))
+    if print_info: print('Performing aperture and PSF photometry on the image...')
     
     if stacked == False:
         fwhm_pix = (header['FWHM']) #8.0 
         gain = header['GAIN'] if 'GAIN' in header else 1.0
         error_map = np.sqrt(sky_std**2 + abs(data_sub) / gain)
-        print('Error map average value: %s'%np.nanmean(error_map))
+        if print_info: print('Error map average value: %s'%np.nanmean(error_map))
 
     else:
         print('Photometric analysis of stacked images not implemented yet.')
 
     # Aperture photometry
     psf_gaussian = psf.CircularGaussianPRF(fwhm=fwhm_pix)
-    psf_shape_int = int(phtometry_params['psf_fwhm_shape'] * fwhm_pix)
+    psf_shape_int = int(photometry_params['psf_fwhm_shape'] * fwhm_pix)
     # make sure psf shape is even
     if psf_shape_int%2==0: psf_shape_int+=1
     psf_shape = (psf_shape_int,) * 2
-    print('FWHM: %.2f px'%fwhm_pix)
-    print('PSF shape: ', psf_shape)
+    if print_info: print('FWHM: %.2f px'%fwhm_pix)
+    if print_info: print('PSF shape: ', psf_shape)
 
     # PSF photometry
     psfphot = psf.PSFPhotometry(
         psf_model=psf_gaussian,
         fit_shape=psf_shape,
-        aperture_radius=phtometry_params['aperture_fwhm']*fwhm_pix,
-        fitter_maxiters = phtometry_params['fitter_maxiters']
+        aperture_radius=photometry_params['aperture_fwhm']*fwhm_pix,
+        fitter_maxiters = photometry_params['fitter_maxiters']
     )
     phot_all = cast(Table, psfphot(data_sub, error= error_map,
                        init_params = init_table))
     phot_all.sort('flux_fit', reverse = True) 
-    phot_all['flux_id'] = 0 
+    #phot_all['flux_id'] = 0 
     phot_all['flux_id'] = np.arange(len(phot_all), dtype=int)
-    for i in range(len(phot_all)): 
-        phot_all[i]['flux_id'] = i 
-    print('Found stars by photometry: ',len(phot_all)) 
+    phot_all['peak_value'] = 0
+    # phot_all.pprint_all()
+    for i in range(len(phot_all)):
+        x_peak, y_peak = int(phot_all['x_fit'][i]), int(phot_all['y_fit'][i])
+        try:
+            phot_all[i]['peak_value'] = data_sub[y_peak-int(fwhm_pix):y_peak+int(fwhm_pix), x_peak-int(fwhm_pix):x_peak+int(fwhm_pix)].max() # type: ignore
+        except:
+            phot_all[i]['peak_value'] = 65000 # if the peak is too close to the edge, assign a high value to flag it later
+    if print_info: print('Found stars by photometry: ',len(phot_all)) 
 
     # filtering out the stars with bad photometry
     phot_g_all = phot_all.copy()
@@ -203,19 +220,127 @@ def photo_analysis(filename,
     phot_g_all.remove_rows(np.where((phot_g_all['x_err']>10) |(phot_g_all['y_err']>10))) # type: ignore
     xy_err_gi = np.where((phot_all['x_err']>10) |(phot_all['y_err']>10)) # type: ignore
     # Removing stars with very high qfit or cfit values
-    qfit_filter, cfit_filter = phtometry_params['qfit_filter'], phtometry_params['cfit_filter']
+    qfit_filter, cfit_filter = photometry_params['qfit_filter'], photometry_params['cfit_filter']
     qfit_gi = np.where((phot_all['qfit']>qfit_filter) | (phot_all['qfit']<-qfit_filter))
     cfit_gi = np.where((phot_all['cfit']>cfit_filter) | (phot_all['cfit']<-cfit_filter))
     phot_g_all.remove_rows(np.where((phot_g_all['qfit']>qfit_filter) | (phot_g_all['qfit']<-qfit_filter)))
     phot_g_all.remove_rows(np.where((phot_g_all['cfit']>cfit_filter) | (phot_g_all['cfit']<-cfit_filter)))
+    # Removing stars with peak value above saturation limit
+    sat_gi = np.where(phot_all['peak_value'] > 61000)
+    phot_g_all.remove_rows(np.where(phot_g_all['peak_value'] > 61000))
+    phot_g_all['flux_id'] = np.arange(len(phot_g_all), dtype=int)
+
+    if print_info: print('Good photometry stars: %i'%len(phot_g_all))
+
+    # Instrumental magnitude and error
+    phot_g_all['mag_inst'] = -2.5 * np.log10(phot_g_all['flux_fit']) # type: ignore
+    phot_g_all['mag_inst_err'] = 1.0857 * (phot_g_all['flux_err'] / phot_g_all['flux_fit']) # type: ignore
+
+    if plot:
+        # Stars found after filtering
+        n_fig += 1
+        plt.close(n_fig)
+        fig,ax = plt.subplots(num = n_fig)
+        ax.remove()
+        ax = fig.add_subplot(111, projection=wcs)
+        ax.imshow(data_sub, 
+                cmap = 'gray', origin = 'lower',
+                vmin = - (sky_std*sky_background['sky_threshold']),
+                vmax = (sky_std*sky_background['sky_threshold']),
+                )
+        ax.scatter(phot_g_all['x_fit'], phot_g_all['y_fit'], facecolor = 'none',
+                edgecolor = 'red',label = 'good')
+        ax.scatter(phot_all['x_fit'][qfit_gi], phot_all['y_fit'][qfit_gi], marker = 's',
+                facecolor = 'none', edgecolor = 'blue', label = 'bad (qfit)')
+        ax.scatter(phot_all['x_fit'][cfit_gi], phot_all['y_fit'][cfit_gi], marker = 'd',
+                facecolor = 'none', edgecolor = 'green', label = 'bad (cfit)')
+        ax.scatter(phot_all['x_fit'][flags_gi], phot_all['y_fit'][flags_gi], marker = '*',
+                facecolor = 'none', edgecolor = 'orange', label = 'bad (flag)')
+        ax.scatter(phot_all['x_fit'][big_err_gi], phot_all['y_fit'][big_err_gi], marker = 'p',
+                facecolor = 'none', edgecolor = 'cyan', label = 'bad (flux error)')
+        ax.scatter(phot_all['x_fit'][xy_err_gi], phot_all['y_fit'][xy_err_gi], marker = 'v',
+                facecolor = 'none', edgecolor = 'magenta', label = 'bad (xy error)')
+        ax.scatter(phot_all['x_fit'][sat_gi], phot_all['y_fit'][sat_gi], marker = 'P',
+                facecolor = 'none', edgecolor = 'purple', label = 'bad (saturation)')
+        
+        for i in range(len(phot_g_all)):
+            plt.text(phot_g_all['x_fit'][i]+10, phot_g_all['y_fit'][i], phot_g_all['flux_id'][i]) # type: ignore
+        ax.legend(ncols = 4, bbox_to_anchor = (0.5,1.08,0,0), loc='center')
+
+        ax.set_xlabel('RA')
+        ax.set_ylabel('DEC')
+        # ax.set_title('Good photometry stars: %i'%len(phot_g_all))
+        plt.show()
+
+    # Comparison with catalogue stars
+    # SDSS_filter = 'psfMag_'+fil[-1]
+    # pstr_filter = fil[-1]+'mag'
+    if catalogue == 'SDSS':
+        cat_mask = ~np.isnan(cat_table[cat_labels[2]])
+    else:
+        cat_mask = ~np.isnan(cat_table[cat_labels[2]]).mask
+    if print_info: print('Comparing with %i catalogued stars in filter %s'%(np.sum(cat_mask), fil))
     
-    print('Good photometry stars: %i'%len(phot_g_all))
+    # Cross-correlation of queried stars and found stars
+    phot_xy = np.array([phot_g_all["x_fit"], phot_g_all["y_fit"]]).T
+    cat_xy = np.array([cat_px[0][cat_mask], cat_px[1][cat_mask]]).T
+    # KD-tree for fast nearest-neighbor search
+    kdtree = cKDTree(cat_xy)
+    dist, idx_cat = kdtree.query(phot_xy, k=1) 
+    # Match if separation < threshold (e.g. 3 pixels)
+    max_sep_pix = matching_params['max_sep_pix']
+    good = dist < max_sep_pix
+    # Build matched table
+    calib = Table()
+    calib["phot_idx"] = phot_g_all['flux_id'][good]
+    calib["cat_idx"] = idx_cat[good]
+    calib["dx_pix"] = phot_xy[good, 0] - cat_xy[idx_cat[good], 0]
+    calib["dy_pix"] = phot_xy[good, 1] - cat_xy[idx_cat[good], 1]
+    calib["sep_pix"] = dist[good]
+    # Link magnitudes
+    calib["mag_inst"] = phot_g_all["mag_inst"][calib["phot_idx"]]
+    calib["mag_cat"] = cat_table[cat_labels[2]][cat_mask][calib["cat_idx"]]
+    # Additional filters
+    calib = calib[(calib["mag_cat"] > matching_params['mag_range'][0]) & 
+                  (calib["mag_cat"] < matching_params['mag_range'][1])]
+    
+    if print_info: print('Stars matched with catalogue after filtering by magnitude and distance: %i'%len(calib))
+
+    # Calculate ZP
+    calib["ZP"] = calib["mag_cat"] - calib["mag_inst"]
+    # mean_zp, med_zp, std_zp = sigma_clipped_stats(calib['ZP'], sigma=1.0, maxiters=5)
+    zp_mask = sigma_clip(calib['ZP'], sigma=1.0, maxiters=3).mask
+    calib = calib[~zp_mask]
+    ZP_mean = np.mean(calib['ZP'])
+    ZP_std = np.std(calib['ZP'])
+    #calib.pprint_all()
+    if print_info: print('ZP = %.3f, rms = %.2e'%(ZP_mean, ZP_std))
+    # print('clipped ZP = %.3f, rms = %.2e'%(mean_zp, std_zp))
+    if 'ZP' in header:
+        if print_info: print('- ZP in header: %.3f, EZP: %.2e'%(header['ZP'], header['EZP']))
+    if print_info: print('Number of stars used: %i'%len(calib))
+    else: 
+        print(' - Using %i catalogued stars'%np.sum(cat_mask))
+        print('   Matched stars: %i'%len(calib))
+        print('   ZP = %.3f, rms = %.2e'%(ZP_mean, ZP_std))
 
 
-    return None
+    # Calculate calibrated magnitudes
+    phot_g_all['mag_calib'] = phot_g_all['mag_inst'] + ZP_mean
+    phot_g_all['mag_calib_err'] = np.sqrt(phot_g_all['mag_inst_err']**2+ZP_std**2)
 
+    if plot:
+        n_fig += 1
+        plt.close(n_fig)
+        fig, ax = plt.subplots(figsize = (10,4),num = n_fig)
+        ax.scatter(phot_g_all['flux_id'], phot_g_all['mag_calib'], marker = '.')
+        ax.errorbar(phot_g_all['flux_id'], phot_g_all['mag_calib'], yerr = phot_g_all['mag_calib_err'], fmt="none", color = 'black')
+        ax.set_ylabel('Measured magnitude')
+        ax.set_title('Filter %s'%fil)
+        ax.grid()
+        plt.show()
 
-
+    return phot_g_all
 
 
 
@@ -258,9 +383,12 @@ def detect_sources(filename,
             print('No initial table provided. Using IRAFStarFinder for source detection.')
             threshold_iraf =  (sky_std * sky_threshold)
             print('- IRAFStarFinder threshold: %s'%threshold_iraf)
-            iraf_finder = IRAFStarFinder(threshold=threshold_iraf, fwhm=fwhm)
+            iraf_finder = IRAFStarFinder(threshold=threshold_iraf, fwhm=fwhm, peakmax=60000)
             print('Detecting sources...')
             iraf_stars = iraf_finder(data_sub)
+            print(iraf_stars['peak'])
+            print(len(iraf_stars))
+            iraf_stars.remove_rows(np.where(iraf_stars['peak'] > 60000)) 
             print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
             # sorting list of found stars
             iraf_stars.sort('flux', reverse = True)
@@ -281,6 +409,7 @@ def detect_sources(filename,
                                     box_size=int(fwhm),
                                     wcs = WCS(header))
             print('- Sources found by find_peaks: %d'%len(fp_sources)) # type: ignore
+            fp_sources.remove_rows(np.where(fp_sources['peak_value'] > 60000)) # type: ignore
             detect_table = fp_sources
             xlab, ylab = 'x_peak', 'y_peak'
 
@@ -340,3 +469,110 @@ def detect_sources(filename,
             fig.canvas.mpl_connect('button_press_event', onclick)
     
     return xy_stars
+
+def get_coordinates(filename, 
+                    scalebar_arcsec = 60,
+                    rotate = True,
+                    ):
+    with fits.open(filename) as hdul:
+        hdu = hdul[0]
+        header = hdu.header #type: ignore
+        data = hdu.data #type: ignore
+        wcs = WCS(header)
+
+    print('Plotting image %s for coordinate selection...'%filename)
+    print('Click on the image to obtain coordinates.')
+    
+    out = widgets.Output()
+    display(out)
+
+    if rotate:
+        wcs_out, shape_out = find_optimal_celestial_wcs((data, wcs))
+        data, _ = reproject_interp((data, wcs), wcs_out, shape_out=shape_out)
+    
+    fig,ax = plt.subplots()
+    ax.remove()
+    ax = fig.add_subplot(111, projection=wcs)
+    # Hardcore background estimation for visualization
+    sky_mean = np.nanmedian(data)
+    sky_std = np.nanstd(data)
+    ax.imshow(data, 
+        cmap = 'gray', origin = 'lower',
+        vmin =  sky_mean-(sky_std * 3),
+        vmax =  sky_mean + sky_std * 3,
+        )
+    ax.set_xlabel('RA')
+    ax.set_ylabel('DEC')
+
+    #scalebar
+    scalebar_angle = scalebar_arcsec/3600*u.deg # type: ignore
+    add_scalebar(ax, scalebar_angle, label="%s arcsec"%str(scalebar_arcsec), 
+                    color='white',
+                    corner = 'bottom left')
+    
+    # Collecting clicked coordinates
+    def onclick(event):
+        if event.inaxes != ax or event.xdata is None or event.ydata is None:
+            return
+        x, y = event.xdata, event.ydata
+        # coords_px.append([x, y])
+        radec = wcs.pixel_to_world(x, y)
+        ax.plot(x, y, 'bx', markersize=10)
+        fig.canvas.draw_idle()
+        print('x y RA DEC: %f %f %f %f'%(x, y, radec.ra.deg, radec.dec.deg))
+        
+        with out:  # capture stdout into output widget [web:266]
+            print(f"x y = {x:.2f} {y:.2f}  |  RA Dec = {radec.ra.deg:.6f}d {radec.dec.deg:.6f}d")
+
+    fig.canvas.mpl_connect('button_press_event', onclick)
+
+
+
+def get_magnitude(filename, 
+                  photometry_table, 
+                  coords,
+                  pix_dist = 5,
+                  print_info = False,
+                  show_plot = False,
+                  ):
+    if type(coords) is not SkyCoord: sky_coords = SkyCoord(coords)
+    else: sky_coords = coords
+    
+    with fits.open(filename) as hdul:
+        hdu = hdul[0]
+        header = hdu.header #type: ignore
+        data = hdu.data #type: ignore
+        wcs = WCS(header)
+
+    px_coords = skycoord_to_pixel(sky_coords, wcs)
+    # Find the closest photometry entry to the given coordinates
+    phot_xy = np.array([photometry_table["x_fit"], photometry_table["y_fit"]]).T
+    dist = np.sqrt((phot_xy[:, 0] - px_coords[0])**2 + (phot_xy[:, 1] - px_coords[1])**2)
+    closest_idx = np.argmin(dist)
+    if print_info: 
+        print('----------- get_magnitude info -----------')
+        print('Input star:   x y = %f %f  |  RA Dec = %f %f'%(px_coords[0], px_coords[1], sky_coords.ra.deg, sky_coords.dec.deg))
+        closest_radec = wcs.pixel_to_world(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1])
+        print('Closest star: x y = %f %f  |  RA Dec = %f %f'%(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1], closest_radec.ra.deg, closest_radec.dec.deg))
+        print('Closest star magnitude: %f at distance %.2f pixels'%(photometry_table['mag_calib'][closest_idx], dist[closest_idx]))
+        print('--------------------------------------------')
+
+    if show_plot:
+        fig, ax = plt.subplots()
+        x, y = int(phot_xy[closest_idx, 0]), int(phot_xy[closest_idx, 1])
+        xstar, ystar = int(px_coords[0]), int(px_coords[1])
+        rad = int(dist[closest_idx]*1.5)
+        if rad < 10: rad = 10
+        ax.imshow(data[y-rad:y+rad, x-rad:x+rad], cmap='gray', origin='lower')
+        ax.plot(xstar-(x-rad), ystar-(y-rad), 'rx', label='Input star')
+        ax.plot(x-(x-rad), y-(y-rad), 'b+', label='Closest star')
+        ax.legend()
+        plt.show()
+
+    if dist[closest_idx] < pix_dist: # if the closest star is within 5 pixels, return its magnitude
+        return photometry_table['mag_calib'][closest_idx]
+    else: 
+        print('No star found within %d pixels of the given coordinates.'%pix_dist)
+        return None
+
+    
