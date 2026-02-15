@@ -196,10 +196,8 @@ def photo_analysis(filename,
     phot_all = cast(Table, psfphot(data_sub, error= error_map,
                        init_params = init_table))
     phot_all.sort('flux_fit', reverse = True) 
-    #phot_all['flux_id'] = 0 
     phot_all['flux_id'] = np.arange(len(phot_all), dtype=int)
     phot_all['peak_value'] = 0
-    # phot_all.pprint_all()
     for i in range(len(phot_all)):
         x_peak, y_peak = int(phot_all['x_fit'][i]), int(phot_all['y_fit'][i])  # type: ignore
         try:
@@ -273,8 +271,6 @@ def photo_analysis(filename,
         plt.show()
 
     # Comparison with catalogue stars
-    # SDSS_filter = 'psfMag_'+fil[-1]
-    # pstr_filter = fil[-1]+'mag'
     if catalogue == 'SDSS':
         cat_mask = ~np.isnan(cat_table[cat_labels[2]])
     else:
@@ -311,7 +307,7 @@ def photo_analysis(filename,
     # mean_zp, med_zp, std_zp = sigma_clipped_stats(calib['ZP'], sigma=1.0, maxiters=5)
     zp_mask = sigma_clip(calib['ZP'], sigma=1.0, maxiters=3).mask  # type: ignore
     calib = calib[~zp_mask]
-    ZP_mean, ZP_std = np.mean(calib['ZP']). np.std(calib['ZP']) # type: ignore
+    ZP_mean, ZP_std = np.mean(calib['ZP']), np.std(calib['ZP']) # type: ignore
 
     if print_info: print('ZP = %.3f, rms = %.2e'%(ZP_mean, ZP_std))
     # print('clipped ZP = %.3f, rms = %.2e'%(mean_zp, std_zp))
@@ -368,6 +364,7 @@ def detect_sources(filename,
 
     if init_table is None:
         print('No initial table provided. Will perform source detection on the image.')
+        print('If you want to save the output table: table.to_pandas().to_pickle("./table.pkl")')
         
         if 'FWHM'  in header:
             fwhm = header['FWHM']
@@ -386,8 +383,6 @@ def detect_sources(filename,
             iraf_finder = IRAFStarFinder(threshold=threshold_iraf, fwhm=fwhm, peakmax=60000)
             print('Detecting sources...')
             iraf_stars = iraf_finder(data_sub)
-            print(iraf_stars['peak'])
-            print(len(iraf_stars))
             iraf_stars.remove_rows(np.where(iraf_stars['peak'] > 60000)) 
             print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
             # sorting list of found stars
