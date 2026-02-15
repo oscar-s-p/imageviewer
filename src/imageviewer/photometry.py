@@ -29,7 +29,7 @@ from astroquery.simbad import Simbad
 import photutils.psf as psf
 from photutils.detection import IRAFStarFinder, find_peaks
 
-from scipy.spatial import cKDTree
+from scipy.spatial import cKDTree # type: ignore
 
 
 def photo_analysis(filename,
@@ -201,7 +201,7 @@ def photo_analysis(filename,
     phot_all['peak_value'] = 0
     # phot_all.pprint_all()
     for i in range(len(phot_all)):
-        x_peak, y_peak = int(phot_all['x_fit'][i]), int(phot_all['y_fit'][i])
+        x_peak, y_peak = int(phot_all['x_fit'][i]), int(phot_all['y_fit'][i])  # type: ignore
         try:
             phot_all[i]['peak_value'] = data_sub[y_peak-int(fwhm_pix):y_peak+int(fwhm_pix), x_peak-int(fwhm_pix):x_peak+int(fwhm_pix)].max() # type: ignore
         except:
@@ -226,8 +226,8 @@ def photo_analysis(filename,
     phot_g_all.remove_rows(np.where((phot_g_all['qfit']>qfit_filter) | (phot_g_all['qfit']<-qfit_filter)))
     phot_g_all.remove_rows(np.where((phot_g_all['cfit']>cfit_filter) | (phot_g_all['cfit']<-cfit_filter)))
     # Removing stars with peak value above saturation limit
-    sat_gi = np.where(phot_all['peak_value'] > 61000)
-    phot_g_all.remove_rows(np.where(phot_g_all['peak_value'] > 61000))
+    sat_gi = np.where(phot_all['peak_value'] > 61000)  # type: ignore
+    phot_g_all.remove_rows(np.where(phot_g_all['peak_value'] > 61000))  # type: ignore
     phot_g_all['flux_id'] = np.arange(len(phot_g_all), dtype=int)
 
     if print_info: print('Good photometry stars: %i'%len(phot_g_all))
@@ -307,13 +307,12 @@ def photo_analysis(filename,
     if print_info: print('Stars matched with catalogue after filtering by magnitude and distance: %i'%len(calib))
 
     # Calculate ZP
-    calib["ZP"] = calib["mag_cat"] - calib["mag_inst"]
+    calib["ZP"] = calib["mag_cat"] - calib["mag_inst"]  # type: ignore
     # mean_zp, med_zp, std_zp = sigma_clipped_stats(calib['ZP'], sigma=1.0, maxiters=5)
-    zp_mask = sigma_clip(calib['ZP'], sigma=1.0, maxiters=3).mask
+    zp_mask = sigma_clip(calib['ZP'], sigma=1.0, maxiters=3).mask  # type: ignore
     calib = calib[~zp_mask]
-    ZP_mean = np.mean(calib['ZP'])
-    ZP_std = np.std(calib['ZP'])
-    #calib.pprint_all()
+    ZP_mean, ZP_std = np.mean(calib['ZP']). np.std(calib['ZP']) # type: ignore
+
     if print_info: print('ZP = %.3f, rms = %.2e'%(ZP_mean, ZP_std))
     # print('clipped ZP = %.3f, rms = %.2e'%(mean_zp, std_zp))
     if 'ZP' in header:
@@ -327,14 +326,15 @@ def photo_analysis(filename,
 
     # Calculate calibrated magnitudes
     phot_g_all['mag_calib'] = phot_g_all['mag_inst'] + ZP_mean
-    phot_g_all['mag_calib_err'] = np.sqrt(phot_g_all['mag_inst_err']**2+ZP_std**2)
+    phot_g_all['mag_calib_err'] = np.sqrt(phot_g_all['mag_inst_err']**2+ZP_std**2)  # type: ignore
 
     if plot:
         n_fig += 1
         plt.close(n_fig)
         fig, ax = plt.subplots(figsize = (10,4),num = n_fig)
-        ax.scatter(phot_g_all['flux_id'], phot_g_all['mag_calib'], marker = '.')
-        ax.errorbar(phot_g_all['flux_id'], phot_g_all['mag_calib'], yerr = phot_g_all['mag_calib_err'], fmt="none", color = 'black')
+        ax.scatter(phot_g_all['flux_id'], phot_g_all['mag_calib'], marker = '.') # type: ignore
+        ax.errorbar(phot_g_all['flux_id'], phot_g_all['mag_calib'], yerr = phot_g_all['mag_calib_err'], # type: ignore
+                    fmt="none", color = 'black') 
         ax.set_ylabel('Measured magnitude')
         ax.set_title('Filter %s'%fil)
         ax.grid()
@@ -519,10 +519,10 @@ def get_coordinates(filename,
         radec = wcs.pixel_to_world(x, y)
         ax.plot(x, y, 'bx', markersize=10)
         fig.canvas.draw_idle()
-        print('x y RA DEC: %f %f %f %f'%(x, y, radec.ra.deg, radec.dec.deg))
+        print('x y RA DEC: %f %f %f %f'%(x, y, radec.ra.deg, radec.dec.deg))  # type: ignore
         
         with out:  # capture stdout into output widget [web:266]
-            print(f"x y = {x:.2f} {y:.2f}  |  RA Dec = {radec.ra.deg:.6f}d {radec.dec.deg:.6f}d")
+            print(f"x y = {x:.2f} {y:.2f}  |  RA Dec = {radec.ra.deg:.6f}d {radec.dec.deg:.6f}d") # type: ignore
 
     fig.canvas.mpl_connect('button_press_event', onclick)
 
@@ -551,9 +551,9 @@ def get_magnitude(filename,
     closest_idx = np.argmin(dist)
     if print_info: 
         print('----------- get_magnitude info -----------')
-        print('Input star:   x y = %f %f  |  RA Dec = %f %f'%(px_coords[0], px_coords[1], sky_coords.ra.deg, sky_coords.dec.deg))
+        print('Input star:   x y = %f %f  |  RA Dec = %f %f'%(px_coords[0], px_coords[1], sky_coords.ra.deg, sky_coords.dec.deg))  # type: ignore
         closest_radec = wcs.pixel_to_world(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1])
-        print('Closest star: x y = %f %f  |  RA Dec = %f %f'%(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1], closest_radec.ra.deg, closest_radec.dec.deg))
+        print('Closest star: x y = %f %f  |  RA Dec = %f %f'%(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1], closest_radec.ra.deg, closest_radec.dec.deg))  # type: ignore
         print('Closest star magnitude: %f at distance %.2f pixels'%(photometry_table['mag_calib'][closest_idx], dist[closest_idx]))
         print('--------------------------------------------')
 
