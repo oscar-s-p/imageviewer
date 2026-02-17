@@ -595,7 +595,16 @@ def detect_sources(filename,
             ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
 
             def onclick(event):
-                if event.inaxes != ax or event.xdata is None or event.ydata is None:
+                # if event.inaxes != ax or event.xdata is None or event.ydata is None:
+                #     return
+                if event.inaxes is None:
+                    print("Event inaxes = None")
+                    return
+                if event.inaxes != ax:
+                    print("Clicked in different axes:", event.inaxes, "expected:", ax)
+                    return
+                if event.xdata is None or event.ydata is None:
+                    print('Event xdata or ydata is None')
                     return
                 x, y = event.xdata, event.ydata
                 radec_i = wcs.pixel_to_world(x,y)
