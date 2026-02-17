@@ -605,7 +605,7 @@ def detect_sources(filename,
                 ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
                 fig.canvas.draw_idle()
 
-            fig.canvas.mpl_connect('button_press_event', onclick)
+            cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
     return radec_stars
 
