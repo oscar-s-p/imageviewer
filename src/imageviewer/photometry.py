@@ -603,7 +603,7 @@ def detect_sources(filename,
                 radec_stars.add_row([radec_i.ra.deg, radec_i.dec.deg])
                 ax.plot(x, y, 'bx', markersize=10)
                 ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
-                fig.canvas.draw_idle()
+                fig.canvas.draw()
 
             cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
