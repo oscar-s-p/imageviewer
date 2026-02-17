@@ -176,8 +176,8 @@ def photo_analysis(filename,
     phot_all['flux_id'] = np.arange(len(phot_all), dtype=int)
     phot_all['peak_value'] = 0
     for i in range(len(phot_all)):
-        x_peak, y_peak = int(phot_all['x_fit'][i]), int(phot_all['y_fit'][i])  # type: ignore
-        try:
+        try: 
+            x_peak, y_peak = int(phot_all['x_fit'][i]), int(phot_all['y_fit'][i])  # type: ignore
             phot_all[i]['peak_value'] = data_sub[y_peak-int(fwhm_pix):y_peak+int(fwhm_pix), x_peak-int(fwhm_pix):x_peak+int(fwhm_pix)].max() # type: ignore
         except:
             phot_all[i]['peak_value'] = 65000 # if the peak is too close to the edge, assign a high value to flag it later
