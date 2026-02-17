@@ -497,7 +497,7 @@ def detect_sources(filename,
     sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=sky_sigma, maxiters=maxiters)
     bkg = sky_mean
     data_sub = data - bkg
-    print('- Sky background mean: %s; Sky background std: %s'%(sky_mean, sky_std))
+    print('- Sky background mean: %.2f; Sky background std: %.2f'%(sky_mean, sky_std))
 
     if init_table is None:
         print('No initial table provided. Will perform source detection on the image.')
@@ -510,12 +510,12 @@ def detect_sources(filename,
         else:
             print("FWHM not found in header. Using input value fwhm = %s."%fwhm)
 
-        print('FWHM used for source detection: %s pixels'%fwhm)
+        print('FWHM used for source detection: %.2f pixels'%fwhm)
 
         if method in methods_dict.keys():
             print('No initial table provided. Using %s for source detection.'%methods_dict[method])
         threshold_method =  (sky_std * sky_threshold)
-        print('- %s threshold: %s'%(methods_dict[method], threshold_method))
+        print('- %s threshold: %.2f'%(methods_dict[method], threshold_method))
         print('Detecting sources...')
         # Source detection
         if method == 'IRAF':
@@ -560,9 +560,14 @@ def detect_sources(filename,
             colnames = init_table.columns.to_list()
         elif type(init_table) == Table:
             colnames = init_table.colnames
-        if 'x' not in colnames or 'y' not in colnames:
-            print('Initial table should have columns "x" and "y". Please check the format of the initial table.')
-            return None
+        if not set(['ra','dec']).issubset(colnames):
+            # if 'x' not in colnames or 'y' not in colnames:
+            if not set(['x','y']).issubset(colnames)
+                print('Initial table should have columns "ra", "dec" or "x", "y". Please check the format of the initial table.')
+                return None
+        else:
+            init_px = skycoord_to_pixel(SkyCoord(init_table['ra'], init_table['dec'], unit = 'deg'), wcs)
+            init_table = Table({'x':init_px[0], 'y': init_px[1]})
         print('Initial table provided. Skipping source detection on the image.')
         xlab, ylab = 'x', 'y'
         detect_table = init_table
@@ -595,7 +600,7 @@ def detect_sources(filename,
                 x, y = event.xdata, event.ydata
                 radec_i = wcs.pixel_to_world(x,y)
                 xy_stars.add_row([x, y])
-                radec_stars.add_row(radec_i.ra.deg, radec_i.dec.deg)
+                radec_stars.add_row([radec_i.ra.deg, radec_i.dec.deg])
                 ax.plot(x, y, 'bx', markersize=10)
                 ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
                 fig.canvas.draw_idle()
