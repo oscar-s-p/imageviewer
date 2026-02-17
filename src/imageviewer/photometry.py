@@ -562,7 +562,7 @@ def detect_sources(filename,
             colnames = init_table.colnames
         if not set(['ra','dec']).issubset(colnames):
             # if 'x' not in colnames or 'y' not in colnames:
-            if not set(['x','y']).issubset(colnames)
+            if not set(['x','y']).issubset(colnames):
                 print('Initial table should have columns "ra", "dec" or "x", "y". Please check the format of the initial table.')
                 return None
         else:
@@ -660,7 +660,7 @@ def get_coordinates(filename,
         fig.canvas.draw_idle()
         print('x y RA DEC: %f %f %f %f'%(x, y, radec.ra.deg, radec.dec.deg))  # type: ignore
         
-        with out:  # capture stdout into output widget [web:266]
+        with out:  # capture stdout into output widget
             print(f"x y = {x:.2f} {y:.2f}  |  RA Dec = {radec.ra.deg:.6f}d {radec.dec.deg:.6f}d") # type: ignore
 
     fig.canvas.mpl_connect('button_press_event', onclick)
