@@ -487,6 +487,10 @@ def detect_sources(filename,
         hdu = hdul[0]
         header = hdu.header #type: ignore
         data = hdu.data #type: ignore
+        wcs = WCS(header)
+
+    methods_dict = {'IRAF': 'IRAFStarFinder',
+                    'find_peaks': 'find_peaks'}
 
     # Background estimation and substraction
     print('Removing sky background...')
@@ -508,13 +512,14 @@ def detect_sources(filename,
 
         print('FWHM used for source detection: %s pixels'%fwhm)
 
+        if method in methods_dict.keys():
+            print('No initial table provided. Using %s for source detection.'%methods_dict[method])
+        threshold_method =  (sky_std * sky_threshold)
+        print('- %s threshold: %s'%(methods_dict[method], threshold_method))
+        print('Detecting sources...')
         # Source detection
         if method == 'IRAF':
-            print('No initial table provided. Using IRAFStarFinder for source detection.')
-            threshold_iraf =  (sky_std * sky_threshold)
-            print('- IRAFStarFinder threshold: %s'%threshold_iraf)
-            iraf_finder = IRAFStarFinder(threshold=threshold_iraf, fwhm=fwhm, peakmax=60000)
-            print('Detecting sources...')
+            iraf_finder = IRAFStarFinder(threshold=threshold_method, fwhm=fwhm, peakmax=60000)
             iraf_stars = iraf_finder(data_sub)
             iraf_stars.remove_rows(np.where(iraf_stars['peak'] > 60000)) 
             print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
@@ -529,11 +534,7 @@ def detect_sources(filename,
             xlab, ylab = 'xcentroid', 'ycentroid'
             
         elif method == 'find_peaks':
-            print('No initial table provided. Using find_peaks for source detection.')
-            threshold_fp = (sky_std * sky_threshold)
-            print('- find_peaks threshold: %s'%threshold_fp)
-            print('Detecting sources...')
-            fp_sources = find_peaks(data_sub, threshold=threshold_fp, 
+            fp_sources = find_peaks(data_sub, threshold=threshold_method, 
                                     box_size=int(fwhm),
                                     wcs = WCS(header))
             print('- Sources found by find_peaks: %d'%len(fp_sources)) # type: ignore
@@ -566,7 +567,10 @@ def detect_sources(filename,
         xlab, ylab = 'x', 'y'
         detect_table = init_table
 
-    xy_stars = Table({'x': np.asarray(detect_table[xlab]), 'y': np.asarray(detect_table[ylab])}) # type: ignore
+    xs, ys = np.asarray(detect_table[xlab]), np.asarray(detect_table[ylab])
+    xy_stars = Table({'x': xs, 'y': ys}) # type: ignore
+    radec = wcs.pixel_to_world(xs, ys)
+    radec_stars = Table({'ra': np.asarray(radec.ra.deg), 'dec': np.asarray(radec.dec.deg)})
 
     if plot:
         fig,ax = plt.subplots()
@@ -589,14 +593,16 @@ def detect_sources(filename,
                 if event.inaxes != ax or event.xdata is None or event.ydata is None:
                     return
                 x, y = event.xdata, event.ydata
+                radec_i = wcs.pixel_to_world(x,y)
                 xy_stars.add_row([x, y])
+                radec_stars.add_row(radec_i.ra.deg, radec_i.dec.deg)
                 ax.plot(x, y, 'bx', markersize=10)
                 ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
                 fig.canvas.draw_idle()
 
             fig.canvas.mpl_connect('button_press_event', onclick)
     
-    return xy_stars
+    return radec_stars
 
 def get_coordinates(filename, 
                     scalebar_arcsec = 60,
