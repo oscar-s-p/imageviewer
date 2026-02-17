@@ -122,6 +122,7 @@ def photo_analysis(filename,
     
     cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs) # type: ignore
     init_px = skycoord_to_pixel(SkyCoord(init_table['ra'], init_table['dec'], unit='deg'), wcs) # type: ignore
+    init_px_tbl = Table({'x': init_px[0], 'y': init_px[1]})
 
     if plot:
         n_fig += 1
@@ -174,7 +175,7 @@ def photo_analysis(filename,
         fitter_maxiters = photometry_params['fitter_maxiters']
     )
     phot_all = cast(Table, psfphot(data_sub, error= error_map,
-                       init_params = init_px))
+                       init_params = init_px_tbl))
     phot_all.sort('flux_fit', reverse = True) 
     phot_all['flux_id'] = np.arange(len(phot_all), dtype=int)
     phot_all['peak_value'] = 0
@@ -295,7 +296,7 @@ def photo_analysis(filename,
         if print_info: print('- ZP in header: %.3f, EZP: %.2e'%(header['ZP'], header['EZP']))
     if print_info: print('Number of stars used: %i'%len(calib))
     else: 
-        print(' - Using %i catalogued stars'%np.sum(cat_mask))
+        print(' - Using %i catalogued stars'%len(cat_table))
         print('   Matched stars: %i'%len(calib))
         print('   ZP = %.3f, rms = %.2e'%(ZP_mean, ZP_std))
 
