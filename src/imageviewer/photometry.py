@@ -314,11 +314,15 @@ def get_catalogue(filename,
                   filter = 'g',
                   mag_range = (13, 18),
                   print_info = True,
+                  plot = False, 
+                  rotate = True,
+                  scalebar_arcsec = 60,
                   ):
     
     with fits.open(filename) as hdul:
         hdu = hdul[0]
         header = hdu.header #type: ignore
+        data = hdu.data
         wcs = WCS(header)
 
     if filter is str:
@@ -438,6 +442,8 @@ def get_catalogue(filename,
         return t
         #cat_table = r['ra', 'dec', 'Gmag', ]
     
+    if print_info: print(' - Found %d stars in the field'%len(cat_table))
+
     return_table = cat_table[cat_labels].copy()
     # rename columns
     for o, n in zip(cat_labels, return_labels, strict=True):
@@ -468,8 +474,42 @@ def get_catalogue(filename,
 
     return_table = return_table[good_mag]
 
-    if print_info: print('Found %i stars catalogued in %s in the field'%(len(return_table), catalogue))
+    if print_info: print('Filtered down to %i stars catalogued in %s with filter information in the magnitude range selected.'%(len(return_table), catalogue))
 
+    if plot:
+        if rotate:
+            wcs_old = wcs
+            wcs, shape_out = find_optimal_celestial_wcs((data, wcs_old))
+            data, _ = reproject_interp((data, wcs_old), wcs, shape_out=shape_out)
+        
+        return_xy = skycoord_to_pixel(SkyCoord(return_table['ra'], return_table['dec'], unit = 'deg'), wcs)
+
+        fig,ax = plt.subplots()
+        ax.remove()
+        ax = fig.add_subplot(111, projection=wcs)
+        # Hardcore background estimation for visualization
+        sky_mean = np.nanmedian(data)
+        sky_std = np.nanstd(data)
+        ax.imshow(data, 
+            cmap = 'gray', origin = 'lower',
+            vmin =  sky_mean-(sky_std * 3),
+            vmax =  sky_mean + sky_std * 3,
+            )
+        ax.set_xlabel('RA')
+        ax.set_ylabel('DEC')
+
+        #scalebar
+        scalebar_angle = scalebar_arcsec/3600*u.deg # type: ignore
+        add_scalebar(ax, scalebar_angle, label="%s arcsec"%str(scalebar_arcsec), 
+                        color='white',
+                        corner = 'bottom left')
+        
+        ax.scatter(return_xy[0], return_xy[1], 
+                   marker = 'o', color='red', facecolor = 'none', 
+                   label = '%s stars'%catalogue)
+        ax.set_title('Found %d good stars in %s'%(len(return_table), catalogue))
+        ax.legend()
+        
     return return_table
 
 
@@ -592,6 +632,7 @@ def detect_sources(filename,
         if add_sources:
             # Collecting clicked coordinates
             print('Click on the image to add sources. Close the image when done.')
+            print('  If you want to save the output table: table.to_pandas().to_pickle("./table.pkl")')
             ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
 
             def onclick(event):
@@ -635,8 +676,9 @@ def get_coordinates(filename,
     display(out)
 
     if rotate:
-        wcs_out, shape_out = find_optimal_celestial_wcs((data, wcs))
-        data, _ = reproject_interp((data, wcs), wcs_out, shape_out=shape_out)
+        wcs_old = wcs
+        wcs, shape_out = find_optimal_celestial_wcs((data, wcs_old))
+        data, _ = reproject_interp((data, wcs_old), wcs, shape_out=shape_out)
     
     fig,ax = plt.subplots()
     ax.remove()
