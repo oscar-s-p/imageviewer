@@ -39,17 +39,13 @@ def photo_analysis(filename,
                    sky_background = {'sigma': 3.0, 'maxiters': 5, 'sky_threshold': 3.0},
                    photometry_params = {'psf_fwhm_shape': 3.0, 'aperture_fwhm': 3.0, 'fitter_maxiters': 100,
                                        'qfit_filter': 8, 'cfit_filter': 0.05},
-                #    catalogue = 'PanSTARRS',
                    matching_params = {'mag_range': (13, 18), 'max_sep_pix': 5},
                    plot = True, n_fig_init = 0,
                    stacked = False,
                    print_info = True,
                    ):
     n_fig = n_fig_init
-    phot_tables = []
     sky = {'mean':[], 'std':[]}
-    #e_dict = {'error':[], 'B':[], 'n_im':[], 'avg_t':[],'sum1':[], 'sum2':[]}
-    #SNR_pix = []
 
     if init_table is None:
         print('No table of stars "init_table" provided. Use detect_sources function to detect sources and perform photometric analysis.\n')
@@ -251,12 +247,6 @@ def photo_analysis(filename,
         # ax.set_title('Good photometry stars: %i'%len(phot_g_all))
         plt.show()
 
-    # Comparison with catalogue stars
-    # if catalogue == 'SDSS':
-    #     cat_mask = ~np.isnan(cat_table[cat_labels[2]])
-    # else:
-    #     cat_mask = ~np.isnan(cat_table[cat_labels[2]]).mask
-    # if print_info: print('Comparing with %i catalogued stars in filter %s'%(np.sum(cat_mask), fil))
     
     # Cross-correlation of queried stars and found stars
     phot_xy = np.array([phot_g_all["x_fit"], phot_g_all["y_fit"]]).T
@@ -276,7 +266,7 @@ def photo_analysis(filename,
     calib["sep_pix"] = dist[good]
     # Link magnitudes
     calib["mag_inst"] = phot_g_all["mag_inst"][calib["phot_idx"]]
-    calib["mag_cat"] = cat_table[fil[-1]][calib["cat_idx"]]
+    calib["mag_cat"] = cat_table[fil[-1]][calib["cat_idx"]] # type: ignore
     # Additional filters
     calib = calib[(calib["mag_cat"] > matching_params['mag_range'][0]) & 
                   (calib["mag_cat"] < matching_params['mag_range'][1])]
@@ -741,7 +731,9 @@ def get_magnitude(filename,
                   pix_dist = 5,
                   print_info = False,
                   show_plot = False,
+                  n_fig = 99,
                   ):
+    
     if type(coords) is not SkyCoord: sky_coords = SkyCoord(coords)
     else: sky_coords = coords
     
@@ -765,7 +757,10 @@ def get_magnitude(filename,
         print('--------------------------------------------')
 
     if show_plot:
-        fig, ax = plt.subplots()
+        plt.close(n_fig)
+        fig, ax = plt.subplots(num = n_fig)
+        ax.remove()
+        ax = fig.add_subplot(111, projection = wcs)
         x, y = int(phot_xy[closest_idx, 0]), int(phot_xy[closest_idx, 1])
         xstar, ystar = int(px_coords[0]), int(px_coords[1])
         rad = int(dist[closest_idx]*1.5)
@@ -780,6 +775,7 @@ def get_magnitude(filename,
         return photometry_table['mag_calib'][closest_idx]
     else: 
         print('No star found within %d pixels of the given coordinates.'%pix_dist)
+        print('- Closest star at %.1f pixels'%dist[closest_idx])
         return None
 
     
