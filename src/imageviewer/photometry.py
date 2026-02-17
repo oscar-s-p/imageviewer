@@ -39,7 +39,7 @@ def photo_analysis(filename,
                    sky_background = {'sigma': 3.0, 'maxiters': 5, 'sky_threshold': 3.0},
                    photometry_params = {'psf_fwhm_shape': 3.0, 'aperture_fwhm': 3.0, 'fitter_maxiters': 100,
                                        'qfit_filter': 8, 'cfit_filter': 0.05},
-                   catalogue = 'PanSTARRS',
+                #    catalogue = 'PanSTARRS',
                    matching_params = {'mag_range': (13, 18), 'max_sep_pix': 5},
                    plot = True, n_fig_init = 0,
                    stacked = False,
@@ -95,17 +95,32 @@ def photo_analysis(filename,
     if type(init_table) == pd.DataFrame:
         init_table = Table.from_pandas(init_table)
     colnames = init_table.colnames
-    if 'x' not in colnames or 'y' not in colnames:
-        print('Initial table should have columns "x" and "y". Please check the format of the initial table.')
+
+    if not set(['ra','dec']).issubset(colnames):
+        print('Initial table should have columns "ra", "dec". Please check format of "init_table".')
         return None
     
     if print_info: print('Initial number of star coordinates looked at: %i'%len(init_table))
 
-
+    # Catalogue table
+    if type(cat_table) == str:
+        if cat_table.endswith('.pkl'):
+            cat_table = pd.read_pickle(cat_table)
+        elif cat_table.endswith('.csv'):
+            cat_table = pd.read_csv(cat_table)
+        else:
+            print('Unsupported file format for initial table. Please provide a .pkl or .csv file.')
+            return None
+        if type(cat_table) == pd.DataFrame:
+            colnames = cat_table.columns.to_list()
+        elif type(cat_table) == Table:
+            colnames = cat_table.colnames
+        if not set(['ra','dec']).issubset(colnames):
+            if not set(['x','y']).issubset(colnames):
+                print('Catalogue table should have columns "ra", "dec" or "x", "y". Please check format of "cat_table".')
+                return None
+    
     cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs) # type: ignore
-    # else:
-    #     print('No catalogue provided. Available catalogues: "SDSS" and "PanSTARRS".')
-    #     return None
     
     if plot:
         n_fig += 1
