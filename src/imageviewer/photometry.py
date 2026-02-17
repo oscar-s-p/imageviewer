@@ -135,7 +135,7 @@ def photo_analysis(filename,
                     vmax =  + (sky_std*sky_background['sky_threshold']),
                     )
         ax.scatter(cat_px[0], cat_px[1], facecolor = 'none', edgecolor = 'green', label = 'Catalogue stars')
-        ax.scatter(init_px['x'], init_px['y'], facecolor = 'none', edgecolor = 'red', marker = 's', label = 'Stars looked') # type: ignore
+        ax.scatter(init_px[0], init_px[1], facecolor = 'none', edgecolor = 'red', marker = 's', label = 'Stars looked') # type: ignore
         ax.legend()
         title_str = 'Catalogued stars and known stars\nover image in filter %s'%header['FILTER'] if 'FILTER' in header else 'Catalogued stars and known stars'
         title_str += '\nStars in catalogue: %i'%len(cat_px[0])
@@ -251,15 +251,15 @@ def photo_analysis(filename,
         plt.show()
 
     # Comparison with catalogue stars
-    if catalogue == 'SDSS':
-        cat_mask = ~np.isnan(cat_table[cat_labels[2]])
-    else:
-        cat_mask = ~np.isnan(cat_table[cat_labels[2]]).mask
-    if print_info: print('Comparing with %i catalogued stars in filter %s'%(np.sum(cat_mask), fil))
+    # if catalogue == 'SDSS':
+    #     cat_mask = ~np.isnan(cat_table[cat_labels[2]])
+    # else:
+    #     cat_mask = ~np.isnan(cat_table[cat_labels[2]]).mask
+    # if print_info: print('Comparing with %i catalogued stars in filter %s'%(np.sum(cat_mask), fil))
     
     # Cross-correlation of queried stars and found stars
     phot_xy = np.array([phot_g_all["x_fit"], phot_g_all["y_fit"]]).T
-    cat_xy = np.array([cat_px[0][cat_mask], cat_px[1][cat_mask]]).T
+    cat_xy = np.array([cat_px[0], cat_px[1]]).T
     # KD-tree for fast nearest-neighbor search
     kdtree = cKDTree(cat_xy)
     dist, idx_cat = kdtree.query(phot_xy, k=1) 
@@ -275,7 +275,7 @@ def photo_analysis(filename,
     calib["sep_pix"] = dist[good]
     # Link magnitudes
     calib["mag_inst"] = phot_g_all["mag_inst"][calib["phot_idx"]]
-    calib["mag_cat"] = cat_table[cat_labels[2]][cat_mask][calib["cat_idx"]]
+    calib["mag_cat"] = cat_table[fil[-1]][calib["cat_idx"]]
     # Additional filters
     calib = calib[(calib["mag_cat"] > matching_params['mag_range'][0]) & 
                   (calib["mag_cat"] < matching_params['mag_range'][1])]
