@@ -320,6 +320,17 @@ def get_catalogue(filename,
         hdu = hdul[0]
         header = hdu.header #type: ignore
         wcs = WCS(header)
+
+    if filter is str:
+        filter_list = [filter]
+    else: filter_list = filter
+    
+    if not set(filter_list).issubset(['g','r','i','z']):
+        print('Filters chosen must be in %s'%['g','r','i','z'])
+        return None
+    
+    return_labels = ['ra', 'dec'] + filter_list
+    
     # Defining sky area to search in SDSS catalogue
     sc_center = SkyCoord(header['CRVAL1']*u.deg, header['CRVAL2']*u.deg)
     # RA, DEC of image corners
@@ -330,51 +341,58 @@ def get_catalogue(filename,
     ra_range = [corners_sky.ra.min().value, corners_sky.ra.max().value] # type: ignore
     dec_range = [corners_sky.dec.min().value, corners_sky.dec.max().value] # type: ignore
     radius = Angle(np.max([ra_range[1]-ra_range[0], dec_range[1]-dec_range[0]])/2, u.deg)
-    if print_info: print('Sky area observed in RA, DEC (deg): ', ra_range, dec_range)
+    if print_info: print('Sky area observed in RA, DEC (deg): ')
+    if print_info: print('   ', ra_range, dec_range)
+    
+    if print_info: print('Querying %s'%catalogue)
     
     if catalogue == 'SDSS':
+        # cat_filter = 'psfMag_'
+        cat_filter_list = ['psfMag_' + fil for fil in filter_list]
+        cat_labels = ['ra', 'dec'] + cat_filter_list
         # Query SDSS with the sky area, obtain psfMag values for interest filters
         cat_table = SDSS.query_region(sc_center,                               # type: ignore
                                     width = (ra_range[1]-ra_range[0])*u.deg,
                                     height = (dec_range[1]-dec_range[0])*u.deg,
-                                    fields=['ra','dec', 'psfMag_g', 'psfMag_r', 'psfMag_i']
+                                    fields = cat_labels
                                     )
-        if print_info: print('Found %i stars catalogued in SDSS in the field'%len(cat_table))
         # Transforming obtained sky coordinates of stars to pixels in the image
         cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs)
-        cat_labels = ['ra', 'dec', 'psfMag_'+filter]
+        cat_table = cat_table[cat_labels]
     
     elif catalogue == 'PanSTARRS':
         # Query Vizier for panstarrs1
         #vizier = Vizier(columns = ['ra','dec', 'gmag', 'rmag', 'imag'])
+        cat_filter_list = [fil + 'mag' for fil in filter_list]
+        cat_labels = ['RAJ2000', 'DEJ2000'] + cat_filter_list
         pstr = Vizier.query_region(sc_center,                           # type: ignore
                                     width = (ra_range[1]-ra_range[0])*u.deg,
                                     height = (dec_range[1]-dec_range[0])*u.deg,
                                     catalog = 'II/349/ps1'
                                     #fields=['ra','dec', 'gmag', 'rmag', 'imag']
                                     )
-        cat_table = pstr['II/349/ps1']['RAJ2000', 'DEJ2000', 'gmag', 'rmag', 'imag']
+        cat_table = pstr['II/349/ps1'][cat_labels] #['RAJ2000', 'DEJ2000', 'gmag', 'rmag', 'imag']
         cat_px = skycoord_to_pixel(SkyCoord(cat_table['RAJ2000'], cat_table['DEJ2000'], unit='deg'), wcs)
-        if print_info: print('Found %i stars catalogued in Panstarr in the field'%len(cat_table))
-        cat_labels = ['ra', 'dec', filter+'mag']
+        # cat_labels = ['ra', 'dec', filter+'mag']
 
     elif catalogue == 'Simbad':
         # Query Simbad for stars in the field
+        cat_filter_list = filter_list
         custom_simbad = Simbad()
         custom_simbad.add_votable_fields('ra(d)', 'dec(d)', 'g', 'r', 'i', 'z')
         cat_table = custom_simbad.query_region(sc_center, radius = radius)
-        if print_info: print('Found %i stars catalogued in Simbad in the field'%len(cat_table))
         cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs)
-        cat_labels = ['ra', 'dec', filter]
+        cat_labels = ['ra', 'dec'] + cat_filter_list
+        cat_table = cat_table[cat_labels]
 
     elif catalogue == 'Gaia':
         # Query Gaia for stars in the field
         Gaia.ROW_LIMIT = 1000
-        j = Gaia.cone_search_async(sc_center, 
-                                   radius=Angle(np.max([ra_range[1]-ra_range[0], dec_range[1]-dec_range[0]])/2, u.deg),
-                                   columns = ['ra', 'dec', 'phot_g_mean_mag', ])
-        t = j.get_results()
-        # N = 1000
+        # j = Gaia.cone_search_async(sc_center, 
+        #                            radius=Angle(np.max([ra_range[1]-ra_range[0], dec_range[1]-dec_range[0]])/2, u.deg),
+        #                            columns = ['ra', 'dec', 'phot_g_mean_mag', ])
+        # t = j.get_results()
+        N = 10000
         # adql = f"""
         #         SELECT TOP {N}
         #         gspc.source_id,
@@ -388,10 +406,71 @@ def get_catalogue(filename,
         #         CIRCLE('ICRS', {sc_center.ra.deg}, {sc_center.dec.deg}, {radius.deg/2})
         #         )
         #         """
+        adql = f"""
+                SELECT TOP {N}
+                    gs.source_id, gs.ra, gs.dec,
+                    gspc.g_sdss_mag, gspc.r_sdss_mag, gspc.i_sdss_mag, gspc.z_sdss_mag
+                FROM gaiadr3.gaia_source_lite AS gs
+                JOIN gaiadr3.synthetic_photometry_gspc AS gspc
+                    USING (source_id)
+                WHERE 1=CONTAINS(
+                    POINT('ICRS', gs.ra, gs.dec),
+                    CIRCLE('ICRS', {sc_center.ra.deg}, {sc_center.dec.deg}, {radius.deg/2})
+                    )
+                AND gs.phot_g_mean_mag > {mag_range[0]}
+                AND gs.phot_g_mean_mag < {mag_range[1]}
+                AND gspc.g_sdss_flag = 0
+                AND gspc.r_sdss_flag = 0
+                AND gspc.i_sdss_flag = 0
+                AND gspc.z_sdss_flag = 0
+                """
+        job = Gaia.launch_job_async(
+                                adql,
+                                dump_to_file=True,
+                                output_format="votable_gzip",   # small on disk
+                                output_file="gaia_sdss_griz.vot.gz"
+                            ) 
         # job = Gaia.launch_job_async(adql)
+        # If you want the table in memory afterward (can be big):
+        tbl = job.get_results()
+        print(len(tbl), tbl.colnames)
         # t = job.get_results()
         return t
         #cat_table = r['ra', 'dec', 'Gmag', ]
+    
+    return_table = cat_table[cat_labels].copy()
+    # rename columns
+    for o, n in zip(cat_labels, return_labels, strict=True):
+        return_table.rename_column(o, n)
+    
+    # filtering out all rows without filter info
+    # row is "all missing" if every kept column is masked on that row
+    all_missing = np.ones(len(return_table), dtype=bool)
+    for c in filter_list:
+        col = return_table[c]
+        m = getattr(col, "mask", None)
+        if m is None:
+            # Non-masked column => treat as never-missing for this test
+            m = np.zeros(len(return_table), dtype=bool)
+        all_missing &= np.array(m, dtype=bool)
+        # remove nans too
+        mag_vals = np.array(col)
+        if np.issubdtype(mag_vals.dtype, np.floating):
+            all_missing &= ~np.isnan(mag_vals)
+
+    return_table = return_table[~all_missing]
+    # filtering out all rows with all mags out of the selected range
+    good_mag = np.ones(len(return_table), dtype=bool)
+    for fil in filter_list:
+        mag_fil = np.array(return_table[fil])
+        good_mag &= (mag_fil > mag_range[0]) 
+        good_mag &= (mag_fil < mag_range[1]) 
+
+    return_table = return_table[good_mag]
+
+    if print_info: print('Found %i stars catalogued in %s in the field'%(len(return_table), catalogue))
+
+    return return_table
 
 
 def detect_sources(filename, 
