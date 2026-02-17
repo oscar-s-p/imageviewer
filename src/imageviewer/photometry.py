@@ -121,7 +121,8 @@ def photo_analysis(filename,
                 return None
     
     cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs) # type: ignore
-    
+    init_px = skycoord_to_pixel(SkyCoord(init_table['ra'], init_table['dec'], unit='deg'), wcs) # type: ignore
+
     if plot:
         n_fig += 1
         plt.close(n_fig)
@@ -134,11 +135,11 @@ def photo_analysis(filename,
                     vmax =  + (sky_std*sky_background['sky_threshold']),
                     )
         ax.scatter(cat_px[0], cat_px[1], facecolor = 'none', edgecolor = 'green', label = 'Catalogue stars')
-        ax.scatter(init_table['x'], init_table['y'], facecolor = 'none', edgecolor = 'red', marker = 's', label = 'Stars looked') # type: ignore
+        ax.scatter(init_px['x'], init_px['y'], facecolor = 'none', edgecolor = 'red', marker = 's', label = 'Stars looked') # type: ignore
         ax.legend()
         title_str = 'Catalogued stars and known stars\nover image in filter %s'%header['FILTER'] if 'FILTER' in header else 'Catalogued stars and known stars'
-        title_str += '\nCatalogue: %s, stars found: %i'%(catalogue, len(cat_px[0]))
-        title_str += '\nStars looked at: %i'%len(init_table)
+        title_str += '\nStars in catalogue: %i'%len(cat_px[0])
+        title_str += '\nStars looked at: %i'%len(init_px)
         ax.set_title(title_str)
         ax.set_xlabel('RA')
         ax.set_ylabel('DEC')
@@ -173,7 +174,7 @@ def photo_analysis(filename,
         fitter_maxiters = photometry_params['fitter_maxiters']
     )
     phot_all = cast(Table, psfphot(data_sub, error= error_map,
-                       init_params = init_table))
+                       init_params = init_px))
     phot_all.sort('flux_fit', reverse = True) 
     phot_all['flux_id'] = np.arange(len(phot_all), dtype=int)
     phot_all['peak_value'] = 0
