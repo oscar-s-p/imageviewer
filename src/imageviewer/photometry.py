@@ -667,14 +667,21 @@ def detect_sources(filename,
     return radec_stars
 
 def get_coordinates(filename, 
+                    coords = None,
                     scalebar_arcsec = 60,
                     rotate = True,
                     ):
+    
     with fits.open(filename) as hdul:
         hdu = hdul[0]
         header = hdu.header #type: ignore
         data = hdu.data #type: ignore
         wcs = WCS(header)
+
+    if type(coords) is not type(None):
+        if type(coords) is not SkyCoord: sky_coords = SkyCoord(coords)
+        else: sky_coords = coords
+        px_coords = skycoord_to_pixel(sky_coords, wcs)
 
     print('Plotting image %s for coordinate selection...'%filename)
     print('Click on the image to obtain coordinates.')
@@ -706,6 +713,13 @@ def get_coordinates(filename,
     add_scalebar(ax, scalebar_angle, label="%s arcsec"%str(scalebar_arcsec), 
                     color='white',
                     corner = 'bottom left')
+    
+    if type(coords) is not type(None):
+        ax.scatter(px_coords[0], px_coords[1],
+                   marker = 'o', color = 'red',
+                   facecolor = 'none',
+                   label = 'Input coordinates')
+        ax.legend()
     
     # Collecting clicked coordinates
     def onclick(event):
@@ -769,13 +783,14 @@ def get_magnitude(filename,
         ax.plot(xstar-(x-rad), ystar-(y-rad), 'rx', label='Input star')
         ax.plot(x-(x-rad), y-(y-rad), 'b+', label='Closest star')
         ax.legend()
+        ax.set_xlabel('RA')
+        ax.set_ylabel('DEC')
         plt.show()
 
     if dist[closest_idx] < pix_dist: # if the closest star is within 5 pixels, return its magnitude
-        return photometry_table['mag_calib'][closest_idx]
+        return [photometry_table['mag_calib'][closest_idx],photometry_table['mag_calib_err'][closest_idx]]
     else: 
         print('No star found within %d pixels of the given coordinates.'%pix_dist)
         print('- Closest star at %.1f pixels'%dist[closest_idx])
-        return None
-
+        return [None, None]
     
