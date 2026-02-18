@@ -1150,554 +1150,554 @@ Utility functions for WCS handling and image reprojection for stacking.
 """
 
 
-def filter_df(original_df, 
-            filters_dict,
-            ask_all = False,
-            plotting = {
-                'bool': False}
-        ):
-    '''Method to filter the dataframe and optionally plot the distributions before and after filtering.
+# def filter_df(original_df, 
+#             filters_dict,
+#             ask_all = False,
+#             plotting = {
+#                 'bool': False}
+#         ):
+#     '''Method to filter the dataframe and optionally plot the distributions before and after filtering.
 
-    Parameters
-    ---------
-    filters : dict
-        Dictionary with filtering conditions. Possible keys: any column in the dataset ('seeing', 'moon', 'EZP', 'DUSTPLA', 'AIRMASS', 'TESSMAG', 'filter').
+#     Parameters
+#     ---------
+#     filters : dict
+#         Dictionary with filtering conditions. Possible keys: any column in the dataset ('seeing', 'moon', 'EZP', 'DUSTPLA', 'AIRMASS', 'TESSMAG', 'filter').
 
-    ask_all : bool, optional
-        If True, asks for how to appluy each filter (above, below or equal to the filter value).
+#     ask_all : bool, optional
+#         If True, asks for how to appluy each filter (above, below or equal to the filter value).
 
-    plotting : dict, optional
-        Dictionary with plotting options. If 'bool' is True, plots the distributions before and after filtering.
-        Possible keys: 'n_bins', 'figsize', 'group_cols'.
-    '''
+#     plotting : dict, optional
+#         Dictionary with plotting options. If 'bool' is True, plots the distributions before and after filtering.
+#         Possible keys: 'n_bins', 'figsize', 'group_cols'.
+#     '''
 
-    plotting_kw = {'variable': None,
-                    'n_bins': 100, 
-                    'figsize_frame': (4,3), 
-                    'group_together': None,
-                    'group_separate': None,
-                    'plot_all': False,
-                    'x_tight': False,
-                    'log': False,
-                    }
-    if plotting['bool']:
-        for key in plotting_kw.keys():
-            if key not in plotting.keys():
-                plotting[key] = plotting_kw[key]
-    howto_dict = {'a': '>', 'b': '<', 'e': '='}
-    # Decide whether to filter values above, below or equal to each filter value
-    list_filter = []
-    for key in filters_dict.keys():
-        if type(filters_dict[key]) is tuple:
-            list_filter.append('ab')
-        elif key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
-            list_filter.append('e')
-        elif key in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS'] and not ask_all:
-            list_filter.append('b')
-        elif key in ['moon', 'TESSMAG'] and not ask_all:
-            list_filter.append('a')
-        else:
-            howto = ''
-            while howto not in ['a','b','e', 'ab']:
-                try:
-                    howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
-                except:
-                    print('Invalid input. Input must be a, b or e. Try again.')
-                    howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
-            list_filter.append(howto)
+#     plotting_kw = {'variable': None,
+#                     'n_bins': 100, 
+#                     'figsize_frame': (4,3), 
+#                     'group_together': None,
+#                     'group_separate': None,
+#                     'plot_all': False,
+#                     'x_tight': False,
+#                     'log': False,
+#                     }
+#     if plotting['bool']:
+#         for key in plotting_kw.keys():
+#             if key not in plotting.keys():
+#                 plotting[key] = plotting_kw[key]
+#     howto_dict = {'a': '>', 'b': '<', 'e': '='}
+#     # Decide whether to filter values above, below or equal to each filter value
+#     list_filter = []
+#     for key in filters_dict.keys():
+#         if type(filters_dict[key]) is tuple:
+#             list_filter.append('ab')
+#         elif key in ['filter', 'telescope', 'camera', 'object', 'im_type'] and not ask_all:
+#             list_filter.append('e')
+#         elif key in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS'] and not ask_all:
+#             list_filter.append('b')
+#         elif key in ['moon', 'TESSMAG'] and not ask_all:
+#             list_filter.append('a')
+#         else:
+#             howto = ''
+#             while howto not in ['a','b','e', 'ab']:
+#                 try:
+#                     howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+#                 except:
+#                     print('Invalid input. Input must be a, b or e. Try again.')
+#                     howto = str(input('- Filtering by \"%s\" with value: %s, do you want to filter (a)bove, (b)elow or (e)qual? '%(key, filters_dict[key])))
+#             list_filter.append(howto)
 
-    print('Filtering dataset with:')
-    for i, key in enumerate(filters_dict.keys()):
-        if type(filters_dict[key]) is tuple:
-            print(' - %s < %s < %s'%(filters_dict[key][0], key, filters_dict[key][1]))
-        else:
-            print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
+#     print('Filtering dataset with:')
+#     for i, key in enumerate(filters_dict.keys()):
+#         if type(filters_dict[key]) is tuple:
+#             print(' - %s < %s < %s'%(filters_dict[key][0], key, filters_dict[key][1]))
+#         else:
+#             print(' - %s %s %s'%(key, howto_dict[list_filter[i]], filters_dict[key]))
 
-    df_filtered = original_df.copy()
-    for i, key in enumerate(filters_dict.keys()):
-        if key not in original_df.columns:
-                print('ERROR: \"%s\" is not in the available columns: %s'%(key, original_df.columns.tolist()))
-        elif list_filter[i] == 'a':
-            df_filtered = df_filtered[df_filtered[key]>filters_dict[key]]
-        elif list_filter[i] == 'b':
-            df_filtered = df_filtered[df_filtered[key]<filters_dict[key]]
-        elif list_filter[i] == 'ab':
-            df_filtered = df_filtered[(df_filtered[key]> filters_dict[key][0]) & (df_filtered[key]< filters_dict[key][1])]
-        elif list_filter[i] == 'e':
-            if type(filters_dict[key])!=list:
-                df_filtered = df_filtered[df_filtered[key]==filters_dict[key]]
-            else:
-                df_temp = pd.DataFrame()
-                for val in filters_dict[key]:
-                    df_temp = pd.concat([df_temp, df_filtered[df_filtered[key]==val]])
-                df_filtered = df_temp
-        else:
-            print('ERROR: unrecognized filtering condition. Skipping filter by \"%s\"'%key)
-        if len(df_filtered) == 0:
-            print('**WARNING**: No data left after filtering by \"%s\"'%key)
-            print('Aborting filtering process...')
-            return
-    print('Number of files before filtering: %d'%len(original_df))
-    print('Number of files after filtering: %d'%len(df_filtered))
+#     df_filtered = original_df.copy()
+#     for i, key in enumerate(filters_dict.keys()):
+#         if key not in original_df.columns:
+#                 print('ERROR: \"%s\" is not in the available columns: %s'%(key, original_df.columns.tolist()))
+#         elif list_filter[i] == 'a':
+#             df_filtered = df_filtered[df_filtered[key]>filters_dict[key]]
+#         elif list_filter[i] == 'b':
+#             df_filtered = df_filtered[df_filtered[key]<filters_dict[key]]
+#         elif list_filter[i] == 'ab':
+#             df_filtered = df_filtered[(df_filtered[key]> filters_dict[key][0]) & (df_filtered[key]< filters_dict[key][1])]
+#         elif list_filter[i] == 'e':
+#             if type(filters_dict[key])!=list:
+#                 df_filtered = df_filtered[df_filtered[key]==filters_dict[key]]
+#             else:
+#                 df_temp = pd.DataFrame()
+#                 for val in filters_dict[key]:
+#                     df_temp = pd.concat([df_temp, df_filtered[df_filtered[key]==val]])
+#                 df_filtered = df_temp
+#         else:
+#             print('ERROR: unrecognized filtering condition. Skipping filter by \"%s\"'%key)
+#         if len(df_filtered) == 0:
+#             print('**WARNING**: No data left after filtering by \"%s\"'%key)
+#             print('Aborting filtering process...')
+#             return
+#     print('Number of files before filtering: %d'%len(original_df))
+#     print('Number of files after filtering: %d'%len(df_filtered))
 
-    # Plotting results
-    if plotting['bool']:
-        # Variables to plot separately
-        if plotting['group_separate'] is not None:
-            group_separate_values = df_filtered[plotting['group_separate']].unique()
-            n_separate = len(group_separate_values)
-        else: n_separate = 1
-        # Variables to plot together
-        if plotting['group_together'] is not None:
-            group_together_values = df_filtered[plotting['group_together']].unique()
-            n_together = len(group_together_values)
-        if plotting['variable'] is None:
-            print('ERROR: To plot filtering results, please provide a variable to plot in plotting[\'variable\'].')
-            return
-        if type(plotting['variable'])== str:
-            plotting['variable'] = [plotting['variable']]
-        for i, var in enumerate(plotting['variable']):
-            if var not in original_df.columns:
-                print('ERROR: \"%s\" is not in the available columns: %s'%(var, original_df.columns.tolist()))
-            else:
-                fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
-                                        figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
-                var_ext = [var]
-                if plotting['group_together'] is not None:
-                    var_ext.append(plotting['group_together'])
+#     # Plotting results
+#     if plotting['bool']:
+#         # Variables to plot separately
+#         if plotting['group_separate'] is not None:
+#             group_separate_values = df_filtered[plotting['group_separate']].unique()
+#             n_separate = len(group_separate_values)
+#         else: n_separate = 1
+#         # Variables to plot together
+#         if plotting['group_together'] is not None:
+#             group_together_values = df_filtered[plotting['group_together']].unique()
+#             n_together = len(group_together_values)
+#         if plotting['variable'] is None:
+#             print('ERROR: To plot filtering results, please provide a variable to plot in plotting[\'variable\'].')
+#             return
+#         if type(plotting['variable'])== str:
+#             plotting['variable'] = [plotting['variable']]
+#         for i, var in enumerate(plotting['variable']):
+#             if var not in original_df.columns:
+#                 print('ERROR: \"%s\" is not in the available columns: %s'%(var, original_df.columns.tolist()))
+#             else:
+#                 fig, ax = plt.subplots(ncols = n_separate, nrows = 1, 
+#                                         figsize = (plotting['figsize_frame'][0]*n_separate, plotting['figsize_frame'][1]))
+#                 var_ext = [var]
+#                 if plotting['group_together'] is not None:
+#                     var_ext.append(plotting['group_together'])
 
-                if plotting['group_separate'] is None:
-                    ax = [ax]
-                    df_plot = df_filtered[var_ext]
-                    df_plot_all = original_df[var_ext]
+#                 if plotting['group_separate'] is None:
+#                     ax = [ax]
+#                     df_plot = df_filtered[var_ext]
+#                     df_plot_all = original_df[var_ext]
 
-                for j in range(n_separate):
-                    if plotting['group_separate'] is not None:
-                        df_plot = df_filtered[var_ext][df_filtered[plotting['group_separate']]==group_separate_values[j]]
-                        df_plot_all = original_df[var_ext][original_df[plotting['group_separate']]==group_separate_values[j]]
-                        ax[j].set_title('%s: %s'%(plotting['group_separate'], group_separate_values[j]))
+#                 for j in range(n_separate):
+#                     if plotting['group_separate'] is not None:
+#                         df_plot = df_filtered[var_ext][df_filtered[plotting['group_separate']]==group_separate_values[j]]
+#                         df_plot_all = original_df[var_ext][original_df[plotting['group_separate']]==group_separate_values[j]]
+#                         ax[j].set_title('%s: %s'%(plotting['group_separate'], group_separate_values[j]))
 
-                    ax[j].hist(df_plot[var], bins = plotting['n_bins'], 
-                                label = '$N_{filtered}$: %s'%len(df_plot),
-                                histtype = 'step')
-                    min_filt, max_filt = ax[j].get_xlim()
-                    bin_width = (max_filt - min_filt)/plotting['n_bins']
+#                     ax[j].hist(df_plot[var], bins = plotting['n_bins'], 
+#                                 label = '$N_{filtered}$: %s'%len(df_plot),
+#                                 histtype = 'step')
+#                     min_filt, max_filt = ax[j].get_xlim()
+#                     bin_width = (max_filt - min_filt)/plotting['n_bins']
 
-                    if plotting['group_together'] is not None:
-                        for k in range(n_together):
-                            df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
-                            #TODO: ERROR here when there are no rows of one of the combinations of groupt together and separate (filter and camera to test)
-                            bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
-                            arr_bins_together = np.arange(df_plot_together[var].min(), df_plot_together[var].max()+bin_width, bin_width)
-                            ax[j].hist(df_plot_together[var], bins = arr_bins_together, 
-                                        label = '$N_{%s}$: %s'%(group_together_values[k], len(df_plot_together)),
-                                        histtype = 'step')
-                    if plotting['plot_all']:
-                        min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
-                        bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
-                        arr_bins_all = np.arange(min_all, max_all+bin_width, bin_width)
-                        ax[j].hist(df_plot_all[var], bins = arr_bins_all, 
-                                    label = '$N_{all}$: %s'%len(df_plot_all),
-                                    histtype = 'step', color ='gray')
-                        if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
-                        else: 
-                            if var in filters_dict.keys(): 
-                                if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
-                                    ax[j].axvline(filters_dict[var][0], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][0]))
-                                    ax[j].axvline(filters_dict[var][1], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][1]))
-                                else:
-                                    ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
-                        if plotting['log']: ax[j].set_yscale('log')
-                        ax[j].legend()
-                    ax[j].set_xlabel(var)
+#                     if plotting['group_together'] is not None:
+#                         for k in range(n_together):
+#                             df_plot_together = df_plot[df_plot[plotting['group_together']]==group_together_values[k]]
+#                             #TODO: ERROR here when there are no rows of one of the combinations of groupt together and separate (filter and camera to test)
+#                             bins_together = int(plotting['n_bins'] * (df_plot_together[var].max()-df_plot_together[var].min())/(max_filt - min_filt))
+#                             arr_bins_together = np.arange(df_plot_together[var].min(), df_plot_together[var].max()+bin_width, bin_width)
+#                             ax[j].hist(df_plot_together[var], bins = arr_bins_together, 
+#                                         label = '$N_{%s}$: %s'%(group_together_values[k], len(df_plot_together)),
+#                                         histtype = 'step')
+#                     if plotting['plot_all']:
+#                         min_all, max_all = df_plot_all[var].min(), df_plot_all[var].max()
+#                         bins_all = int(plotting['n_bins'] * (max_all-min_all)/(max_filt - min_filt))
+#                         arr_bins_all = np.arange(min_all, max_all+bin_width, bin_width)
+#                         ax[j].hist(df_plot_all[var], bins = arr_bins_all, 
+#                                     label = '$N_{all}$: %s'%len(df_plot_all),
+#                                     histtype = 'step', color ='gray')
+#                         if plotting['x_tight']: ax[j].set_xlim(min_filt, max_filt)
+#                         else: 
+#                             if var in filters_dict.keys(): 
+#                                 if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
+#                                     ax[j].axvline(filters_dict[var][0], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][0]))
+#                                     ax[j].axvline(filters_dict[var][1], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var][1]))
+#                                 else:
+#                                     ax[j].axvline(filters_dict[var], color = 'red', linewidth = 0.7, alpha = 0.5,label = '%s = %s'%(var, filters_dict[var]))
+#                         if plotting['log']: ax[j].set_yscale('log')
+#                         ax[j].legend()
+#                     ax[j].set_xlabel(var)
                     
-                ax[0].set_ylabel('Number of observations')
-                if var in filters_dict.keys():
-                    if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
-                        fig.suptitle('Filtering %s < \"%s\" < %s'%(filters_dict[var][0], var, filters_dict[var][1]))
-                    else:
-                        fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
-                else:
-                    fig.suptitle('Plotting \"%s\" after filtering'%var)
-                plt.tight_layout()
-                plt.show()
+#                 ax[0].set_ylabel('Number of observations')
+#                 if var in filters_dict.keys():
+#                     if list_filter[list(filters_dict.keys()).index(var)] == 'ab':
+#                         fig.suptitle('Filtering %s < \"%s\" < %s'%(filters_dict[var][0], var, filters_dict[var][1]))
+#                     else:
+#                         fig.suptitle('Filtering \"%s\" %s %s'%(var, howto_dict[list_filter[list(filters_dict.keys()).index(var)]], filters_dict[var]))
+#                 else:
+#                     fig.suptitle('Plotting \"%s\" after filtering'%var)
+#                 plt.tight_layout()
+#                 plt.show()
 
-    return df_filtered
+#     return df_filtered
 
 
-def final_wcs(object, ra, dec, fov_x, fov_y, pixscale,
-             name_out = "output_template.fits"):
-    # Creating new folder for combined image
-    if object+'_image' not in os.listdir():
-        os.system('mkdir '+object+'_image')
+# def final_wcs(object, ra, dec, fov_x, fov_y, pixscale,
+#              name_out = "output_template.fits"):
+#     # Creating new folder for combined image
+#     if object+'_image' not in os.listdir():
+#         os.system('mkdir '+object+'_image')
         
-    ra_center, dec_center  = Angle(ra).deg, Angle(dec).deg 
-    # fov_x, fov_y, pixscale in arcsec
-    fov_x_deg, fov_y_deg = Angle(fov_x).deg, Angle(fov_y).deg
-    # Convert to degrees
-    pixscale_deg = pixscale / 3600.0
+#     ra_center, dec_center  = Angle(ra).deg, Angle(dec).deg 
+#     # fov_x, fov_y, pixscale in arcsec
+#     fov_x_deg, fov_y_deg = Angle(fov_x).deg, Angle(fov_y).deg
+#     # Convert to degrees
+#     pixscale_deg = pixscale / 3600.0
 
-    # Image size in pixels (rounded to integer)
-    naxis1 = int(np.round(fov_x_deg / pixscale_deg))
-    naxis2 = int(np.round(fov_y_deg / pixscale_deg))
+#     # Image size in pixels (rounded to integer)
+#     naxis1 = int(np.round(fov_x_deg / pixscale_deg))
+#     naxis2 = int(np.round(fov_y_deg / pixscale_deg))
 
-    print('Creating WCS:')
-    print('  Center (RA, DEC): ', 
-          Angle(ra).to_string(),
-          Angle(dec_center*u.deg).to_string())
-    print('  Size (deg): ',
-          Angle(fov_x_deg*u.deg).to_string(),
-          Angle(fov_y_deg*u.deg).to_string())
-    # Define WCS with TAN projection, north up, east left
-    w = WCS(naxis=2)
-    w.wcs.crval = [ra_center, dec_center]          # sky coord at reference pixel
-    w.wcs.crpix = [naxis1 / 2.0, naxis2 / 2.0]     # reference pixel at image center
-    w.wcs.cdelt = np.array([-pixscale_deg, pixscale_deg])  # RA decreases to the right
-    w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
-    w.wcs.cunit = ["deg", "deg"]
+#     print('Creating WCS:')
+#     print('  Center (RA, DEC): ', 
+#           Angle(ra).to_string(),
+#           Angle(dec_center*u.deg).to_string())
+#     print('  Size (deg): ',
+#           Angle(fov_x_deg*u.deg).to_string(),
+#           Angle(fov_y_deg*u.deg).to_string())
+#     # Define WCS with TAN projection, north up, east left
+#     w = WCS(naxis=2)
+#     w.wcs.crval = [ra_center, dec_center]          # sky coord at reference pixel
+#     w.wcs.crpix = [naxis1 / 2.0, naxis2 / 2.0]     # reference pixel at image center
+#     w.wcs.cdelt = np.array([-pixscale_deg, pixscale_deg])  # RA decreases to the right
+#     w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+#     w.wcs.cunit = ["deg", "deg"]
 
-    # Convert to FITS header and add NAXIS
-    hdr_out = w.to_header()
-    hdr_out["NAXIS"]  = 2
-    hdr_out["NAXIS1"] = naxis1
-    hdr_out["NAXIS2"] = naxis2
-    hdr_out["SCALE"]  = pixscale
+#     # Convert to FITS header and add NAXIS
+#     hdr_out = w.to_header()
+#     hdr_out["NAXIS"]  = 2
+#     hdr_out["NAXIS1"] = naxis1
+#     hdr_out["NAXIS2"] = naxis2
+#     hdr_out["SCALE"]  = pixscale
     
-    shape_out = (naxis2, naxis1)
-    # Empty image for later writing
-    data = np.zeros((naxis2, naxis1), dtype=float)
-    hdu = fits.PrimaryHDU(data=data, header=hdr_out)
-    hdu.writeto(object+'_image/'+name_out, overwrite=True)
-    return w, shape_out
+#     shape_out = (naxis2, naxis1)
+#     # Empty image for later writing
+#     data = np.zeros((naxis2, naxis1), dtype=float)
+#     hdu = fits.PrimaryHDU(data=data, header=hdr_out)
+#     hdu.writeto(object+'_image/'+name_out, overwrite=True)
+#     return w, shape_out
 
 
-"""
-def filtering_df(iv_class, filters, plotting = False):
-    print('Filtering dataset')
-    # Filter seeing and moon distance from original dataframe
-    df_filtered = iv_class.df_files
-    df_original = iv_class.df_files
-    n_fil = len(filters)
-    mult_filters = False
-    mult_filters_n = 1
-    if 'filter' in filters.keys():
-        if n_fil!=1: n_fil = n_fil-1
-        if type(filters['filter'])!=str:
-            mult_filters = True
-            mult_filters_n = len(filters['filter'])
-    if plotting:
-        fig, ax = plt.subplots(ncols=n_fil, nrows=mult_filters_n+1, figsize=(n_fil*3,3*mult_filters_n))
-        if n_fil==1: ax = np.array([ax])
-        if mult_filters_n>1:
-            ax = ax.flatten()
-        i=0
-        ax[0].set_ylabel('All observations')
-        for fil in filters.keys():
-            if fil!='filter':
-                ax[i].hist(df_filtered[fil], bins=100)
-                ax[i].axvline(df_filtered[fil].mean(), color = 'gray', label = 'mean %s: %.3f'%(fil, df_filtered[fil].mean()))
-                ax[i].axvline(filters[fil], color = 'red', label = 'filtering value: %.3f'%(filters[fil]))
-                ax[i].set_xlabel(fil)
-                ax[i].legend()
-                #plt.suptitle('All observations statistics')
-                i+=1
-    for fil in filters.keys():
-        if fil in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS']:
-            df_filtered = df_filtered[df_filtered[fil]<filters[fil]]
-            df_filtered = df_filtered[df_filtered[fil] > 0]   
-        elif fil in ['moon', 'TESSMAG']:
-            df_filtered = df_filtered[df_filtered[fil]>filters[fil]]
-        elif fil == 'filter' and mult_filters == False:
-            df_filtered = df_filtered[df_filtered[fil]==filters[fil]]
-        elif fil == 'filter' and mult_filters == True:
-            df_list = []
-            for fi in filters[fil]:
-                df_list.append(df_filtered[df_filtered['filter']==fi])
-        else: print('ERROR: UNRECOGNIZED FILTER')
+# """
+# def filtering_df(iv_class, filters, plotting = False):
+#     print('Filtering dataset')
+#     # Filter seeing and moon distance from original dataframe
+#     df_filtered = iv_class.df_files
+#     df_original = iv_class.df_files
+#     n_fil = len(filters)
+#     mult_filters = False
+#     mult_filters_n = 1
+#     if 'filter' in filters.keys():
+#         if n_fil!=1: n_fil = n_fil-1
+#         if type(filters['filter'])!=str:
+#             mult_filters = True
+#             mult_filters_n = len(filters['filter'])
+#     if plotting:
+#         fig, ax = plt.subplots(ncols=n_fil, nrows=mult_filters_n+1, figsize=(n_fil*3,3*mult_filters_n))
+#         if n_fil==1: ax = np.array([ax])
+#         if mult_filters_n>1:
+#             ax = ax.flatten()
+#         i=0
+#         ax[0].set_ylabel('All observations')
+#         for fil in filters.keys():
+#             if fil!='filter':
+#                 ax[i].hist(df_filtered[fil], bins=100)
+#                 ax[i].axvline(df_filtered[fil].mean(), color = 'gray', label = 'mean %s: %.3f'%(fil, df_filtered[fil].mean()))
+#                 ax[i].axvline(filters[fil], color = 'red', label = 'filtering value: %.3f'%(filters[fil]))
+#                 ax[i].set_xlabel(fil)
+#                 ax[i].legend()
+#                 #plt.suptitle('All observations statistics')
+#                 i+=1
+#     for fil in filters.keys():
+#         if fil in ['seeing', 'EZP', 'DUSTPLA', 'AIRMASS']:
+#             df_filtered = df_filtered[df_filtered[fil]<filters[fil]]
+#             df_filtered = df_filtered[df_filtered[fil] > 0]   
+#         elif fil in ['moon', 'TESSMAG']:
+#             df_filtered = df_filtered[df_filtered[fil]>filters[fil]]
+#         elif fil == 'filter' and mult_filters == False:
+#             df_filtered = df_filtered[df_filtered[fil]==filters[fil]]
+#         elif fil == 'filter' and mult_filters == True:
+#             df_list = []
+#             for fi in filters[fil]:
+#                 df_list.append(df_filtered[df_filtered['filter']==fi])
+#         else: print('ERROR: UNRECOGNIZED FILTER')
 
-    if plotting:
-        if mult_filters == False:
-            i=0
-            for fil in filters.keys():
-                if fil!='filter':
-                    ax[i].hist(df_filtered[fil].to_numpy(), bins=100)
-                    ax[i].axvline(df_filtered[fil].mean(), color = 'red', label = 'filtered mean %s: %.3f'%(fil, df_filtered[fil].mean()))
-                    ax[i].set_xlabel(fil)
-                    ax[i].legend()
-                    i+=1
-        else:
-            #fig, ax = plt.subplots(ncols=n_fil, figsize=(n_fil*3,3))
-            #if n_fil==1: ax = [ax]
-            i=0
-            for fil in filters.keys():
-                if fil!='filter':
-                    for j, df_i in enumerate(df_list):
-                        index = i + (j+1)*n_fil
-                        ax[index].hist(df_i[fil], bins=50)#, label = filters['filter'][j], alpha = 0.5)
-                        ax[index].axvline(df_i[fil].mean(), color = plt.get_cmap('tab10')(j), 
-                                      label = 'filtered mean: %.3f'%(df_i[fil].mean()))
-                        ax[index].set_xlabel(fil)
-                        ax[index].legend()
-                        ax[(j+1)*n_fil].set_ylabel('Filtered '+filters['filter'][j])
-                    i+=1
-        plt.tight_layout()
-    if mult_filters == False:
-        df_filtered.index = np.arange(len(df_filtered))
-        print('Total images after filtering: ', len(df_filtered))
-        return df_filtered
-    else:
-        for i in range(len(df_list)):
-            print('Total images after filtering in %s: %i, total time: %s s'%(filters['filter'][i], len(df_list[i]), df_list[i]['integration'].sum()))
-        return tuple(df_list)
-"""
+#     if plotting:
+#         if mult_filters == False:
+#             i=0
+#             for fil in filters.keys():
+#                 if fil!='filter':
+#                     ax[i].hist(df_filtered[fil].to_numpy(), bins=100)
+#                     ax[i].axvline(df_filtered[fil].mean(), color = 'red', label = 'filtered mean %s: %.3f'%(fil, df_filtered[fil].mean()))
+#                     ax[i].set_xlabel(fil)
+#                     ax[i].legend()
+#                     i+=1
+#         else:
+#             #fig, ax = plt.subplots(ncols=n_fil, figsize=(n_fil*3,3))
+#             #if n_fil==1: ax = [ax]
+#             i=0
+#             for fil in filters.keys():
+#                 if fil!='filter':
+#                     for j, df_i in enumerate(df_list):
+#                         index = i + (j+1)*n_fil
+#                         ax[index].hist(df_i[fil], bins=50)#, label = filters['filter'][j], alpha = 0.5)
+#                         ax[index].axvline(df_i[fil].mean(), color = plt.get_cmap('tab10')(j), 
+#                                       label = 'filtered mean: %.3f'%(df_i[fil].mean()))
+#                         ax[index].set_xlabel(fil)
+#                         ax[index].legend()
+#                         ax[(j+1)*n_fil].set_ylabel('Filtered '+filters['filter'][j])
+#                     i+=1
+#         plt.tight_layout()
+#     if mult_filters == False:
+#         df_filtered.index = np.arange(len(df_filtered))
+#         print('Total images after filtering: ', len(df_filtered))
+#         return df_filtered
+#     else:
+#         for i in range(len(df_list)):
+#             print('Total images after filtering in %s: %i, total time: %s s'%(filters['filter'][i], len(df_list[i]), df_list[i]['integration'].sum()))
+#         return tuple(df_list)
+# """
 
 
-"""def stacking(df, indexes, w_out, shape_out,
-             sigma =3, min_area = 5):
-    print('Aligning and stacking images')
-    fil = df.iloc[0]['filter']
-    object = df.iloc[0]['object']
-    # Creating new folder for combined image
-    if object+'_image' not in os.listdir():
-        os.system('mkdir '+object+'_image')
-    if fil not in os.listdir(object+'_image'):
-        os.system('mkdir '+object+'_image/'+fil)
-    # Build input list for reproject: (array, WCS) pairs
-    cube = np.empty((len(indexes),) + shape_out, dtype=float)
-    for i, fn in enumerate(df.iloc[indexes]['path']):
-        with fits.open(fn) as hdul:
-            hdu = hdul[0]  # adjust if image is in another extension
-            data = hdu.data.astype(float)
-            data = data/df.loc[i]['integration']
-            wcs = WCS(hdu.header)
-        reproj, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
-        if i==0: cube[0] = reproj
-        # align all to first image
-        try:
-            registered_image, _ = aa.register(reproj, cube[0],
-                                             detection_sigma = sigma,
-                                             min_area = min_area)
-            cube[i] = registered_image
-        except ValueError as e:
-            print('Cannot align index', indexes[i], ' - ', e)
-        except aa.MaxIterError as e:
-            print('Cannot align index', indexes[i], ' - ', e)
-        if i == len(indexes)//4: print('  25% done')
-        if i == len(indexes)//2: print('  50% done')
+# """def stacking(df, indexes, w_out, shape_out,
+#              sigma =3, min_area = 5):
+#     print('Aligning and stacking images')
+#     fil = df.iloc[0]['filter']
+#     object = df.iloc[0]['object']
+#     # Creating new folder for combined image
+#     if object+'_image' not in os.listdir():
+#         os.system('mkdir '+object+'_image')
+#     if fil not in os.listdir(object+'_image'):
+#         os.system('mkdir '+object+'_image/'+fil)
+#     # Build input list for reproject: (array, WCS) pairs
+#     cube = np.empty((len(indexes),) + shape_out, dtype=float)
+#     for i, fn in enumerate(df.iloc[indexes]['path']):
+#         with fits.open(fn) as hdul:
+#             hdu = hdul[0]  # adjust if image is in another extension
+#             data = hdu.data.astype(float)
+#             data = data/df.loc[i]['integration']
+#             wcs = WCS(hdu.header)
+#         reproj, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+#         if i==0: cube[0] = reproj
+#         # align all to first image
+#         try:
+#             registered_image, _ = aa.register(reproj, cube[0],
+#                                              detection_sigma = sigma,
+#                                              min_area = min_area)
+#             cube[i] = registered_image
+#         except ValueError as e:
+#             print('Cannot align index', indexes[i], ' - ', e)
+#         except aa.MaxIterError as e:
+#             print('Cannot align index', indexes[i], ' - ', e)
+#         if i == len(indexes)//4: print('  25% done')
+#         if i == len(indexes)//2: print('  50% done')
         
-    # Sigma-clipping
-    clip = sigma_clip(cube, sigma=sigma, axis=0, masked=True)
-    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan)
-    print('\nStacking finished!')
-    return stack_sigclip"""
+#     # Sigma-clipping
+#     clip = sigma_clip(cube, sigma=sigma, axis=0, masked=True)
+#     stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan)
+#     print('\nStacking finished!')
+#     return stack_sigclip"""
 
-def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
-                sig_clip = 3, add_name = '',
-                rem_sky = True, norm = False,
-                print_tests = False):
-    print('Aligning %i images'%(len(indexes)))
-    cam_dict = {'QHY411-1': {'rdnoise': 1.8, 'gain': 0.41, 'scale': 0.141},
-                'QHY411-2': {'rdnoise': 1.81, 'gain': 0.41, 'scale': 0.142},
-                'QHY411-3': {'rdnoise': 1.81, 'gain': 0.41, 'scale': 0.598},
-                'QHY600-3': {'rdnoise': 1.68, 'gain': 0.33, 'scale': 0.192},
-                'QHY600-4': {'rdnoise': 1.68, 'gain': 0.33, 'scale': 0.141},
-                'iKon936-1': {'rdnoise': 6.2, 'gain': 1, 'scale': 0.23}}
+# def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
+#                 sig_clip = 3, add_name = '',
+#                 rem_sky = True, norm = False,
+#                 print_tests = False):
+#     print('Aligning %i images'%(len(indexes)))
+#     cam_dict = {'QHY411-1': {'rdnoise': 1.8, 'gain': 0.41, 'scale': 0.141},
+#                 'QHY411-2': {'rdnoise': 1.81, 'gain': 0.41, 'scale': 0.142},
+#                 'QHY411-3': {'rdnoise': 1.81, 'gain': 0.41, 'scale': 0.598},
+#                 'QHY600-3': {'rdnoise': 1.68, 'gain': 0.33, 'scale': 0.192},
+#                 'QHY600-4': {'rdnoise': 1.68, 'gain': 0.33, 'scale': 0.141},
+#                 'iKon936-1': {'rdnoise': 6.2, 'gain': 1, 'scale': 0.23}}
 
-    fil = df.iloc[0]['filter']
-    object = df.iloc[0]['object']
-    #int_total = 0
-    with fits.open(object+'_image/'+template_out) as hdul:
-        hdu = hdul[0]
-        heads = hdu.header # type: ignore
-        w_out = WCS(heads)
-        shape_out = (heads["NAXIS1"], heads["NAXIS2"])
-        pixscale = heads["SCALE"]
-    # Build input list for reproject: (array, WCS) pairs
-    cube = np.empty((len(indexes),) + shape_out, dtype=float)
-    weights = np.empty((len(indexes)))
-    for i, fn in enumerate(df.iloc[indexes]['path']):
-        try:
-            with fits.open(fn) as hdul:
-                if print_tests: print('opening')
-                hdu = hdul[0]
-                head = hdu.header # type: ignore
-                data = hdu.data.astype(float) # type: ignore
-                wcs = WCS(hdu.header) # type: ignore
+#     fil = df.iloc[0]['filter']
+#     object = df.iloc[0]['object']
+#     #int_total = 0
+#     with fits.open(object+'_image/'+template_out) as hdul:
+#         hdu = hdul[0]
+#         heads = hdu.header # type: ignore
+#         w_out = WCS(heads)
+#         shape_out = (heads["NAXIS1"], heads["NAXIS2"])
+#         pixscale = heads["SCALE"]
+#     # Build input list for reproject: (array, WCS) pairs
+#     cube = np.empty((len(indexes),) + shape_out, dtype=float)
+#     weights = np.empty((len(indexes)))
+#     for i, fn in enumerate(df.iloc[indexes]['path']):
+#         try:
+#             with fits.open(fn) as hdul:
+#                 if print_tests: print('opening')
+#                 hdu = hdul[0]
+#                 head = hdu.header # type: ignore
+#                 data = hdu.data.astype(float) # type: ignore
+#                 wcs = WCS(hdu.header) # type: ignore
             
-            if print_tests: print('reprojecting')
-            data_r, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
-            # substract sky background
-            if print_tests: print('sigma clip stats')
-            sky_mean, _, sky_std = sigma_clipped_stats(data_r, sigma=3.0, maxiters=5, cenfunc=np.mean)
-            if rem_sky:
-                data_r = data_r - sky_mean #head["FLUXSKY"]
-            # now data is in ADU without sky
-            # convert to electrons
-            if print_tests: print('converting electrons')
-            cam_i_dict = cam_dict[df.iloc[indexes[i]]['camera']]
-            data_r = data_r / cam_i_dict['gain']
-            # calculate weights
-            if print_tests: print('calculating weights')
-            weights[i] = 1.0 / ((sky_std/cam_i_dict['gain'])**2 + (cam_i_dict['rdnoise'] / df.iloc[indexes[i]]['integration'])**2)
-            # normalize by integration time
-            if print_tests: print('normalizing by integration time')
-            data_r = data_r / df.iloc[indexes[i]]['integration']
-            # normalize counts
-            if norm:
-                data_r = data_r / np.max(data_r)
+#             if print_tests: print('reprojecting')
+#             data_r, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+#             # substract sky background
+#             if print_tests: print('sigma clip stats')
+#             sky_mean, _, sky_std = sigma_clipped_stats(data_r, sigma=3.0, maxiters=5, cenfunc=np.mean)
+#             if rem_sky:
+#                 data_r = data_r - sky_mean #head["FLUXSKY"]
+#             # now data is in ADU without sky
+#             # convert to electrons
+#             if print_tests: print('converting electrons')
+#             cam_i_dict = cam_dict[df.iloc[indexes[i]]['camera']]
+#             data_r = data_r / cam_i_dict['gain']
+#             # calculate weights
+#             if print_tests: print('calculating weights')
+#             weights[i] = 1.0 / ((sky_std/cam_i_dict['gain'])**2 + (cam_i_dict['rdnoise'] / df.iloc[indexes[i]]['integration'])**2)
+#             # normalize by integration time
+#             if print_tests: print('normalizing by integration time')
+#             data_r = data_r / df.iloc[indexes[i]]['integration']
+#             # normalize counts
+#             if norm:
+#                 data_r = data_r / np.max(data_r)
                 
-            cube[i] = data_r
-            #int_total += df.iloc[indexes[i]]['integration']
-            if i == len(indexes)//4: print('  25% done')
-            if i == len(indexes)//2: print('  50% done')
-            if i == len(indexes)//(3/4): print('  75% done')
-        except Exception as error: print('%s in image %i'%(type(error).__name__, i))
-    # stacking
-    if print_tests: print('Creating CCD list')
-    # Create CCDData list (no disk I/O)
-    ccds = []
-    for i, (data, w) in enumerate(zip(cube, weights)):
-        ccd = CCDData(data, unit='electron/s')  # No header/WCS needed for combine
-        ccd.header['STACKWT'] = w  
-        ccds.append(ccd)
-    print('Stacking images')
-    """clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
-    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan) # type: ignore"""
-    # weighted average with sigma clipping
-    stack = ccdp.combine(
-                            ccds,
-                            method='average',  # Weighted after clip
-                            weights=weights,
-                            sigma_clip=True,
-                            sigma_clip_low_thresh=sig_clip,
-                            sigma_clip_high_thresh=sig_clip,
-                            sigma_clip_func=np.ma.median,
-                            sigma_clip_dev_func=mad_std    # Robust std (import from astropy.stats)
-                        )
-    stack_sigclip = stack.data
-    # Convert WCS to FITS header
-    hdr = w_out.to_header()
-    # Saving basic header
-    hdr['NAXIS']  = 2
-    hdr['NAXIS1'] = stack_sigclip.shape[1]
-    hdr['NAXIS2'] = stack_sigclip.shape[0]
-    hdr['SCALE'] = pixscale
-    hdr['FLUXSKY'] = np.nanmean(stack_sigclip)
-    # adding stacking parameters to header
-    hdr['n_im'] = (len(df), 'Total number of images stacked')
-    hdr['total_t'] = (df['integration'].sum(), 'Total integration time stacked')
-    hdr['avg_see'] = (df['seeing'].mean(), 'Average seeing of stacked images')
-    hdr['std_see'] = (df['seeing'].std(), 'Standard deviation of seeing')
-    hdr['filter'] = fil
-    # Create HDU and write to disk
-    hdu = fits.PrimaryHDU(data=stack_sigclip, header=hdr)
-    hdul = fits.HDUList([hdu])
-    hdul.writeto(object+'_image/'+df.iloc[indexes[0]]['filter']+add_name+".fits", overwrite=True)
+#             cube[i] = data_r
+#             #int_total += df.iloc[indexes[i]]['integration']
+#             if i == len(indexes)//4: print('  25% done')
+#             if i == len(indexes)//2: print('  50% done')
+#             if i == len(indexes)//(3/4): print('  75% done')
+#         except Exception as error: print('%s in image %i'%(type(error).__name__, i))
+#     # stacking
+#     if print_tests: print('Creating CCD list')
+#     # Create CCDData list (no disk I/O)
+#     ccds = []
+#     for i, (data, w) in enumerate(zip(cube, weights)):
+#         ccd = CCDData(data, unit='electron/s')  # No header/WCS needed for combine
+#         ccd.header['STACKWT'] = w  
+#         ccds.append(ccd)
+#     print('Stacking images')
+#     """clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
+#     stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan) # type: ignore"""
+#     # weighted average with sigma clipping
+#     stack = ccdp.combine(
+#                             ccds,
+#                             method='average',  # Weighted after clip
+#                             weights=weights,
+#                             sigma_clip=True,
+#                             sigma_clip_low_thresh=sig_clip,
+#                             sigma_clip_high_thresh=sig_clip,
+#                             sigma_clip_func=np.ma.median,
+#                             sigma_clip_dev_func=mad_std    # Robust std (import from astropy.stats)
+#                         )
+#     stack_sigclip = stack.data
+#     # Convert WCS to FITS header
+#     hdr = w_out.to_header()
+#     # Saving basic header
+#     hdr['NAXIS']  = 2
+#     hdr['NAXIS1'] = stack_sigclip.shape[1]
+#     hdr['NAXIS2'] = stack_sigclip.shape[0]
+#     hdr['SCALE'] = pixscale
+#     hdr['FLUXSKY'] = np.nanmean(stack_sigclip)
+#     # adding stacking parameters to header
+#     hdr['n_im'] = (len(df), 'Total number of images stacked')
+#     hdr['total_t'] = (df['integration'].sum(), 'Total integration time stacked')
+#     hdr['avg_see'] = (df['seeing'].mean(), 'Average seeing of stacked images')
+#     hdr['std_see'] = (df['seeing'].std(), 'Standard deviation of seeing')
+#     hdr['filter'] = fil
+#     # Create HDU and write to disk
+#     hdu = fits.PrimaryHDU(data=stack_sigclip, header=hdr)
+#     hdul = fits.HDUList([hdu])
+#     hdul.writeto(object+'_image/'+df.iloc[indexes[0]]['filter']+add_name+".fits", overwrite=True)
     
-    #fig, ax = plt.subplots()
-    #ax.imshow(stack_sigclip, origin = 'lower', norm = 'log', cmap = 'gray')
-    #return stack_sigclip, cube
+#     #fig, ax = plt.subplots()
+#     #ax.imshow(stack_sigclip, origin = 'lower', norm = 'log', cmap = 'gray')
+#     #return stack_sigclip, cube
 
-"""def stacking_align(df, indexes, template_out, #w_out, shape_out,
-                    ref_s,
-                    sigma = 3, min_area = 5,
-                    sig_clip = 3,
-                    show_ref = False,
-                   add_name = ''):
+# """def stacking_align(df, indexes, template_out, #w_out, shape_out,
+#                     ref_s,
+#                     sigma = 3, min_area = 5,
+#                     sig_clip = 3,
+#                     show_ref = False,
+#                    add_name = ''):
     
-    with fits.open(template_out) as hdul:
-        hdu = hdul[0]
-        heads = hdu.header
-        w_out = WCS(heads)
-        shape_out = (heads["NAXIS1"], heads["NAXIS2"])
-        pixscale = heads["SCALE"]
+#     with fits.open(template_out) as hdul:
+#         hdu = hdul[0]
+#         heads = hdu.header
+#         w_out = WCS(heads)
+#         shape_out = (heads["NAXIS1"], heads["NAXIS2"])
+#         pixscale = heads["SCALE"]
         
-    print('Aligning %i images'%(len(indexes)))
-    print('Finding transform to image indexes[0]')
-    # Build input list for reproject: (array, WCS) pairs
-    ref_s_c = []
-    for i, rs in enumerate(ref_s):
-        ref_s_c.append(SkyCoord(ra=rs.split()[0]+'d', dec=rs.split()[1]+'d',frame = 'icrs'))
-    cube = np.empty((len(indexes),) + shape_out, dtype=float)
-    for i, fn in enumerate(df.iloc[indexes]['path']):
-        with fits.open(fn) as hdul:
-            hdu = hdul[0]  # adjust if image is in another extension
-            data = hdu.data.astype(float)
-            data = data/df.loc[i]['integration']
-            wcs = WCS(hdu.header)
-        # Not reprojecting with WCS, only  to the first image, the resti with transformation with stars
-        # obtain pixel coordinates of ref_stars
-        ref_px = []
-        for rs in ref_s_c:
-            px_x, px_y = skycoord_to_pixel(rs, wcs)
-            ref_px.append([px_x,px_y])
-        img_pos_xy = np.array(ref_px)
-        """
-"""
-        print(img_pos_xy)
-        fig, ax = plt.subplots(figsize=(6,6))
-        ax.imshow(data, origin='lower', norm='log', cmap='gray')
-        for k, px_xy in enumerate(img_pos_xy):
-            circ = plt.Circle((px_xy[0], px_xy[1]), 20, fill=False, edgecolor=plt.get_cmap('tab10')(k), linewidth=1)
-            ax.add_patch(circ)"""
-"""
-        if i==0: 
-            reference, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
-            print('Transforming images to reference WCS with selected star alignment.')
-            # obtain reference stars in px coordinates 
-            """
-"""
-            if show_ref:
-                fig, ax = plt.subplots()
-                ax.imshow(reference, origin='lower', cmap = 'gray', norm = 'log')
-                for k, px_xy in enumerate(img_pos_xy):
-                    circ = plt.Circle((px_xy[0], px_xy[1]), 20, fill=False, edgecolor=plt.get_cmap('tab10')(k), linewidth=1)
-                    ax.add_patch(circ)"""
-"""
-        # align all to first image
-        try:
-            transform, (pos_img, pos_img_rot) = aa.find_transform(img_pos_xy, reference,
-                                                                  detection_sigma = sigma,
-                                                                  min_area = min_area)
-            #print('Rotation, scale, translation : ', transform.rotation, transform.scale, transform.translation)
-            cube[i], _ = aa.apply_transform(transform, data, reference)
-            #print(data.mean())
-            #print(cube[i].mean(), cube[i].shape)
+#     print('Aligning %i images'%(len(indexes)))
+#     print('Finding transform to image indexes[0]')
+#     # Build input list for reproject: (array, WCS) pairs
+#     ref_s_c = []
+#     for i, rs in enumerate(ref_s):
+#         ref_s_c.append(SkyCoord(ra=rs.split()[0]+'d', dec=rs.split()[1]+'d',frame = 'icrs'))
+#     cube = np.empty((len(indexes),) + shape_out, dtype=float)
+#     for i, fn in enumerate(df.iloc[indexes]['path']):
+#         with fits.open(fn) as hdul:
+#             hdu = hdul[0]  # adjust if image is in another extension
+#             data = hdu.data.astype(float)
+#             data = data/df.loc[i]['integration']
+#             wcs = WCS(hdu.header)
+#         # Not reprojecting with WCS, only  to the first image, the resti with transformation with stars
+#         # obtain pixel coordinates of ref_stars
+#         ref_px = []
+#         for rs in ref_s_c:
+#             px_x, px_y = skycoord_to_pixel(rs, wcs)
+#             ref_px.append([px_x,px_y])
+#         img_pos_xy = np.array(ref_px)
+#         """
+# """
+#         print(img_pos_xy)
+#         fig, ax = plt.subplots(figsize=(6,6))
+#         ax.imshow(data, origin='lower', norm='log', cmap='gray')
+#         for k, px_xy in enumerate(img_pos_xy):
+#             circ = plt.Circle((px_xy[0], px_xy[1]), 20, fill=False, edgecolor=plt.get_cmap('tab10')(k), linewidth=1)
+#             ax.add_patch(circ)"""
+# """
+#         if i==0: 
+#             reference, _ = reproject_interp((data, wcs), w_out, shape_out=shape_out)
+#             print('Transforming images to reference WCS with selected star alignment.')
+#             # obtain reference stars in px coordinates 
+#             """
+# """
+#             if show_ref:
+#                 fig, ax = plt.subplots()
+#                 ax.imshow(reference, origin='lower', cmap = 'gray', norm = 'log')
+#                 for k, px_xy in enumerate(img_pos_xy):
+#                     circ = plt.Circle((px_xy[0], px_xy[1]), 20, fill=False, edgecolor=plt.get_cmap('tab10')(k), linewidth=1)
+#                     ax.add_patch(circ)"""
+# """
+#         # align all to first image
+#         try:
+#             transform, (pos_img, pos_img_rot) = aa.find_transform(img_pos_xy, reference,
+#                                                                   detection_sigma = sigma,
+#                                                                   min_area = min_area)
+#             #print('Rotation, scale, translation : ', transform.rotation, transform.scale, transform.translation)
+#             cube[i], _ = aa.apply_transform(transform, data, reference)
+#             #print(data.mean())
+#             #print(cube[i].mean(), cube[i].shape)
 
-        except ValueError as e:
-            print('Cannot align index', indexes[i], ' - ', e)
-        except aa.MaxIterError as e:
-            print('Cannot align index', indexes[i], ' - ', e)
-        if i == len(indexes)//4: print('  25% done')
-        if i == len(indexes)//2: print('  50% done')
-        if i == len(indexes)//(3/4): print('  75% done')
-    # stacking
-    print('Stacking images')
+#         except ValueError as e:
+#             print('Cannot align index', indexes[i], ' - ', e)
+#         except aa.MaxIterError as e:
+#             print('Cannot align index', indexes[i], ' - ', e)
+#         if i == len(indexes)//4: print('  25% done')
+#         if i == len(indexes)//2: print('  50% done')
+#         if i == len(indexes)//(3/4): print('  75% done')
+#     # stacking
+#     print('Stacking images')
     
-    clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
-    stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan)
-    # Convert WCS to FITS header
-    hdr = w_out.to_header()
-    # Make sure header knows the image size
-    hdr['NAXIS']  = 2
-    hdr['NAXIS1'] = stack_sigclip.shape[1]
-    hdr['NAXIS2'] = stack_sigclip.shape[0]
-    hdr['SCALE'] = pixscale
-    hdr['FLUXSKY'] = np.mean(stack_sigclip)
-    # Create HDU and write to disk
-    hdu = fits.PrimaryHDU(data=stack_sigclip, header=hdr)
-    hdul = fits.HDUList([hdu])
-    hdul.writeto(object+'_image/'+df.loc[indexes[0]]['filter']+add_name+".fits", overwrite=True)
-    #return cube"""
+#     clip = sigma_clip(cube, sigma=sig_clip, axis=0, masked=True)
+#     stack_sigclip = np.ma.mean(clip, axis=0).filled(np.nan)
+#     # Convert WCS to FITS header
+#     hdr = w_out.to_header()
+#     # Make sure header knows the image size
+#     hdr['NAXIS']  = 2
+#     hdr['NAXIS1'] = stack_sigclip.shape[1]
+#     hdr['NAXIS2'] = stack_sigclip.shape[0]
+#     hdr['SCALE'] = pixscale
+#     hdr['FLUXSKY'] = np.mean(stack_sigclip)
+#     # Create HDU and write to disk
+#     hdu = fits.PrimaryHDU(data=stack_sigclip, header=hdr)
+#     hdul = fits.HDUList([hdu])
+#     hdul.writeto(object+'_image/'+df.loc[indexes[0]]['filter']+add_name+".fits", overwrite=True)
+#     #return cube"""
 
-"""
-final_data = np.zeros((naxis1, naxis2))
-for i, fname in enumerate(df['path']):
-    #with fits.open(fname) as hdul: # type: ignore
-    #    head = hdul[0].header # type: ignore
-    #    data = hdul[0].data
-    #    hdul.close()
-    repr_data, _ = reproject_interp(fname, hdr_out, shape_out = (naxis1, naxis2))
-    repr_data = repr_data / df.loc[i]['integration']
-    final_data +=repr_data
-"""
+# """
+# final_data = np.zeros((naxis1, naxis2))
+# for i, fname in enumerate(df['path']):
+#     #with fits.open(fname) as hdul: # type: ignore
+#     #    head = hdul[0].header # type: ignore
+#     #    data = hdul[0].data
+#     #    hdul.close()
+#     repr_data, _ = reproject_interp(fname, hdr_out, shape_out = (naxis1, naxis2))
+#     repr_data = repr_data / df.loc[i]['integration']
+#     final_data +=repr_data
+# """

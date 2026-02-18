@@ -136,7 +136,7 @@ def photo_analysis(filename,
         ax.legend()
         title_str = 'Catalogued stars and known stars\nover image in filter %s'%header['FILTER'] if 'FILTER' in header else 'Catalogued stars and known stars'
         title_str += '\nStars in catalogue: %i'%len(cat_px[0])
-        title_str += '\nStars looked at: %i'%len(init_px)
+        title_str += '\nStars looked at: %i'%len(init_table)
         ax.set_title(title_str)
         ax.set_xlabel('RA')
         ax.set_ylabel('DEC')
@@ -309,13 +309,7 @@ def photo_analysis(filename,
 
     return phot_g_all
 
-"""
-TODO:
-Implement catalogue query, return table with ra, dec and magnitudes
-In photometry, make it work with init_table in ra dec
-In detect_sources, return ra, dec
 
-"""
 def get_catalogue(filename, 
                   catalogue = 'Simbad',
                   filter = 'g',
@@ -329,7 +323,7 @@ def get_catalogue(filename,
     with fits.open(filename) as hdul:
         hdu = hdul[0]
         header = hdu.header #type: ignore
-        data = hdu.data
+        data = hdu.data # type: ignore
         wcs = WCS(header)
 
     if filter is str:
@@ -340,7 +334,7 @@ def get_catalogue(filename,
         print('Filters chosen must be in %s'%['g','r','i','z'])
         return None
     
-    return_labels = ['ra', 'dec'] + filter_list
+    return_labels = ['ra', 'dec'] + filter_list # type: ignore
     
     # Defining sky area to search in SDSS catalogue
     sc_center = SkyCoord(header['CRVAL1']*u.deg, header['CRVAL2']*u.deg)
@@ -393,7 +387,7 @@ def get_catalogue(filename,
         custom_simbad.add_votable_fields('ra(d)', 'dec(d)', 'g', 'r', 'i', 'z')
         cat_table = custom_simbad.query_region(sc_center, radius = radius)
         cat_px = skycoord_to_pixel(SkyCoord(cat_table['ra'], cat_table['dec'], unit='deg'), wcs)
-        cat_labels = ['ra', 'dec'] + cat_filter_list
+        cat_labels = ['ra', 'dec'] + cat_filter_list # type: ignore
         cat_table = cat_table[cat_labels]
 
     elif catalogue == 'Gaia':
@@ -444,9 +438,9 @@ def get_catalogue(filename,
         # job = Gaia.launch_job_async(adql)
         # If you want the table in memory afterward (can be big):
         tbl = job.get_results()
-        print(len(tbl), tbl.colnames)
+        print(len(tbl), tbl.colnames) # type: ignore
         # t = job.get_results()
-        return t
+        return tbl
         #cat_table = r['ra', 'dec', 'Gmag', ]
     
     if print_info: print(' - Found %d stars in the field'%len(cat_table))
@@ -619,10 +613,10 @@ def detect_sources(filename,
         xlab, ylab = 'x', 'y'
         detect_table = init_table
 
-    xs, ys = np.asarray(detect_table[xlab]), np.asarray(detect_table[ylab])
+    xs, ys = np.asarray(detect_table[xlab]), np.asarray(detect_table[ylab]) # type: ignore
     xy_stars = Table({'x': xs, 'y': ys}) # type: ignore
     radec = wcs.pixel_to_world(xs, ys)
-    radec_stars = Table({'ra': np.asarray(radec.ra.deg), 'dec': np.asarray(radec.dec.deg)})
+    radec_stars = Table({'ra': np.asarray(radec.ra.deg), 'dec': np.asarray(radec.dec.deg)}) # type: ignore
 
     if plot:
         fig,ax = plt.subplots()
@@ -657,7 +651,7 @@ def detect_sources(filename,
                 x, y = event.xdata, event.ydata
                 radec_i = wcs.pixel_to_world(x,y)
                 xy_stars.add_row([x, y])
-                radec_stars.add_row([radec_i.ra.deg, radec_i.dec.deg])
+                radec_stars.add_row([radec_i.ra.deg, radec_i.dec.deg]) # type: ignore
                 ax.plot(x, y, 'bx', markersize=10)
                 ax.set_title('Detected sources: %d\nClick to add sources'%len(xy_stars))
                 fig.canvas.draw()
@@ -678,11 +672,6 @@ def get_coordinates(filename,
         data = hdu.data #type: ignore
         wcs = WCS(header)
 
-    if type(coords) is not type(None):
-        if type(coords) is not SkyCoord: sky_coords = SkyCoord(coords)
-        else: sky_coords = coords
-        px_coords = skycoord_to_pixel(sky_coords, wcs)
-
     print('Plotting image %s for coordinate selection...'%filename)
     print('Click on the image to obtain coordinates.')
     
@@ -693,7 +682,13 @@ def get_coordinates(filename,
         wcs_old = wcs
         wcs, shape_out = find_optimal_celestial_wcs((data, wcs_old))
         data, _ = reproject_interp((data, wcs_old), wcs, shape_out=shape_out)
-    
+
+    if type(coords) is not type(None):
+        if type(coords) is not SkyCoord: sky_coords = SkyCoord(coords)
+        else: sky_coords = coords
+        px_coords = skycoord_to_pixel(sky_coords, wcs)
+        print('  Adding coordinates: %s'%coords)
+
     fig,ax = plt.subplots()
     ax.remove()
     ax = fig.add_subplot(111, projection=wcs)
@@ -744,7 +739,7 @@ def get_magnitude(filename,
                   coords,
                   pix_dist = 5,
                   print_info = False,
-                  show_plot = False,
+                  plot = False,
                   n_fig = 99,
                   ):
     
@@ -770,7 +765,7 @@ def get_magnitude(filename,
         print('Closest star magnitude: %f at distance %.2f pixels'%(photometry_table['mag_calib'][closest_idx], dist[closest_idx]))
         print('--------------------------------------------')
 
-    if show_plot:
+    if plot:
         plt.close(n_fig)
         fig, ax = plt.subplots(num = n_fig)
         ax.remove()
