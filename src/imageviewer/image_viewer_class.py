@@ -730,40 +730,43 @@ class image_viewer:
             self.img_str, self.img_int = self.return_index(img, iloc = iloc) # type: ignore
             if iloc: df_file = self.df_files.iloc[self.img_int]
             else: df_file = self.df_files.loc[self.img_int]
-            cutout, norm = self.data_manipulation(self.img_str, iloc = iloc, **m_k) # type: ignore
+            try:
+                cutout, norm = self.data_manipulation(self.img_str, iloc = iloc, **m_k) # type: ignore
+            
+                if RGB == False:
+                    if self.bad_format==False:
+                        print('    Object: ', df_file['object'],
+                            '  -  Filter: ', df_file['filter'])
+                    self.plotting(cutout, norm, fig, axes[i], i,
+                                iloc = iloc,
+                                **p_k)
+                else:
+                    # Extracting data from header
+                    with fits.open(os.path.join(self.dir_img, self.img_str)) as hdul: # type: ignore
+                        heads = hdul[0].header # type: ignore
+                        hdul.close()
+                    if i==0: print('    Object: ', df_file['object'])
+                    print('    - ',colors[i],': ', df_file['filter'])
+                    # min and max for manual norm, if max_sky is set, use it to obtain max as max_sky * sky_flux
+                    vmin = heads['FLUXSKY']
+                    if 'vmax' in RGB_norm_kw.keys(): vmax = RGB_norm_kw['vmax']
+                    if RGB_norm_kw['max_sky'] != False: vmax = RGB_norm_kw['max_sky']*heads['FLUXSKY']
+                    if vmax == None: vmax = np.max(cutout.data) # type: ignore
+                    # manual normalization
+                    data = (cutout.data - vmin)/(vmax-vmin)
+                    data_mask = data < 1e-3
+                    data[data_mask] = 1e-3
+                    cutout_RGB.append(data)
 
-            if RGB == False:
-                if self.bad_format==False:
-                    print('    Object: ', df_file['object'],
-                        '  -  Filter: ', df_file['filter'])
-                self.plotting(cutout, norm, fig, axes[i], i,
-                              iloc = iloc,
-                              **p_k)
-            else:
-                # Extracting data from header
-                with fits.open(os.path.join(self.dir_img, self.img_str)) as hdul: # type: ignore
-                    heads = hdul[0].header # type: ignore
-                    hdul.close()
-                if i==0: print('    Object: ', df_file['object'])
-                print('    - ',colors[i],': ', df_file['filter'])
-                # min and max for manual norm, if max_sky is set, use it to obtain max as max_sky * sky_flux
-                vmin = heads['FLUXSKY']
-                if 'vmax' in RGB_norm_kw.keys(): vmax = RGB_norm_kw['vmax']
-                if RGB_norm_kw['max_sky'] != False: vmax = RGB_norm_kw['max_sky']*heads['FLUXSKY']
-                if vmax == None: vmax = np.max(cutout.data) # type: ignore
-                # manual normalization
-                data = (cutout.data - vmin)/(vmax-vmin)
-                data_mask = data < 1e-3
-                data[data_mask] = 1e-3
-                cutout_RGB.append(data)
-
-                if i == len(image_list)-1:                        
-                    rgb_default = make_lupton_rgb(cutout_RGB[0].data, cutout_RGB[1].data, cutout_RGB[2].data,
-                                                  **RGB_kw)
-                    self.plotting(cutout, norm, fig, axes[0],0,
-                                  RGB = True, rgb_data = rgb_default,
-                                  iloc = iloc,
-                                  **plotting_kw[i])
+                    if i == len(image_list)-1:                        
+                        rgb_default = make_lupton_rgb(cutout_RGB[0].data, cutout_RGB[1].data, cutout_RGB[2].data,
+                                                    **RGB_kw)
+                        self.plotting(cutout, norm, fig, axes[0],0,
+                                    RGB = True, rgb_data = rgb_default,
+                                    iloc = iloc,
+                                    **plotting_kw[i])
+            except:
+                print('Error with image ', self.img_str)
         plt.tight_layout()
         if type(save_name) == str:
             plt.savefig(save_name, dpi=300)
