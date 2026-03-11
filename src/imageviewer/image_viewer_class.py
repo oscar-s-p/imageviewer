@@ -134,6 +134,8 @@ class image_viewer:
         # list of images in dir_img and where were they
         files = list(Path(self.dir_img).glob('*.fits'))
         if type(list_files)==list:
+            if type(list_files[0])==str:
+                list_files = [Path(list_files[i]) for i in range(len(list_files))]
             files+=list_files
         folder_found = ['']*len(files)
         # list of images in the different folders of folder_list and the corresponding folder
