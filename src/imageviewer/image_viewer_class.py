@@ -192,8 +192,10 @@ class image_viewer:
                                     "date_time": date_time, "date": date,
                                     "folder_found": folder_found[k],
                                     "im_type" : im_type})
-            except: 
-                if print_error: print('Error with file: %s'%f)
+            except Exception as error: 
+                if print_error: 
+                    print('Error with file: %s'%f)
+                    print(type(error).__name__, '-', error)
                 if bad_format:
                     name = f.name
                     path = str(f.resolve())
