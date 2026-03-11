@@ -157,19 +157,28 @@ class image_viewer:
                     telescope, camera, date_time, object, filter = name.split('_')
                     filter = filter[:-5]
                     date_time = pd.to_datetime(date_time, format='%Y-%m-%d-%H-%M-%S-%f')
-                except: 
-                        if print_error: print('ERROR WITH FILENAME FORMAT CONVENTION EXPECTED: ', f)
-                    # try: # reading files from HST
-                        with fits.open(os.path.join(path)) as hdul: # type: ignore
-                            heads = hdul[0].header # type: ignore
-                            hdul.close()
-                        telescope, camera, date_time, object, filter = heads['TELESCOP'], heads['INSTRUME'], heads['DATE-OBS']+' '+heads['TIME-OBS'], heads['TARGNAME'], heads['FILTER']
-                        try: date_time = pd.to_datetime(date_time, format='%Y-%m-%d %H:%M:%S') # type: ignore
-                        except: date_time = pd.to_datetime(date_time, format='%Y-%m-%d %H:%M:%S.%f') # type: ignore
-                        im_type = telescope
-                    # except:
-                        # print('TTT and HST file format error...')
-                        # telescope, camera, date_time, object, filter = None, None, None, None, None
+                except Exception as error_inner: 
+                        if print_error: 
+                            print('ERROR WITH FILENAME FORMAT CONVENTION EXPECTED: ', f)
+                            print(type(error_inner).__name__, '-', error_inner)
+                        try: # reading files from HST
+                            with fits.open(os.path.join(path)) as hdul: # type: ignore
+                                heads = hdul[0].header # type: ignore
+                                hdul.close()
+                            telescope, camera, date_time, object, filter = heads['TELESCOP'], heads['INSTRUME'], heads['DATE-OBS']+' '+heads['TIME-OBS'], heads['TARGNAME'], heads['FILTER']
+                            try: date_time = pd.to_datetime(date_time, format='%Y-%m-%d %H:%M:%S') # type: ignore
+                            except: date_time = pd.to_datetime(date_time, format='%Y-%m-%d %H:%M:%S.%f') # type: ignore
+                            im_type = telescope
+                        except Exception as error_inner_2:
+                            print(type(error_inner_2).__name__, '-', error_inner_2)
+                            with fits.open(os.path.join(path)) as hdul: # type: ignore
+                                heads = hdul[0].header # type: ignore
+                                hdul.close()
+                            telescope, camera, date_time, object, filter = heads['TELESCOP'], heads['INSTRUME'], heads['DATE-OBS'], heads['object'], heads['FILTER']
+                            date_time = pd.to_datetime(date_time)
+                            print('Exception solved, file correctly read.')
+                            # print('TTT and HST file format error...')
+                            # telescope, camera, date_time, object, filter = None, None, None, None, None
                 add = True
                 if type(filters)==dict:
                     if k==0: print('Filtering found files with: %s'%filters)
