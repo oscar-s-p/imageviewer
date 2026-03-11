@@ -23,6 +23,9 @@ Utility functions to align and stack multiple observations of the same object ar
 - Python 3.7+
 - Required packages: numpy, pandas, matplotlib, astropy, reproject
 
+### Install from github into IPython kernel
+```%pip install --upgrade "git+https://github.com/oscar-s-p/imageviewer.git"```
+
 ### Install from source
 
 1. Clone the repository:
