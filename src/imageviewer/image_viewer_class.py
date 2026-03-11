@@ -170,13 +170,13 @@ class image_viewer:
                             except: date_time = pd.to_datetime(date_time, format='%Y-%m-%d %H:%M:%S.%f') # type: ignore
                             im_type = telescope
                         except Exception as error_inner_2:
-                            print(type(error_inner_2).__name__, '-', error_inner_2)
+                            if print_error: print(type(error_inner_2).__name__, '-', error_inner_2)
                             with fits.open(os.path.join(path)) as hdul: # type: ignore
                                 heads = hdul[0].header # type: ignore
                                 hdul.close()
                             telescope, camera, date_time, object, filter = heads['TELESCOP'], heads['INSTRUME'], heads['DATE-OBS'], heads['object'], heads['FILTER']
                             date_time = pd.to_datetime(date_time)
-                            print('Exception solved, file correctly read.')
+                            if print_error: print('Exception solved, file correctly read.')
                             # print('TTT and HST file format error...')
                             # telescope, camera, date_time, object, filter = None, None, None, None, None
                 add = True
@@ -782,8 +782,9 @@ class image_viewer:
                                     RGB = True, rgb_data = rgb_default,
                                     iloc = iloc,
                                     **plotting_kw[i])
-            except:
+            except Exception as error:
                 print('Error with image ', self.img_str)
+                print(type(error).__name__, '-', error)
         plt.tight_layout()
         if type(save_name) == str:
             plt.savefig(save_name, dpi=300)
