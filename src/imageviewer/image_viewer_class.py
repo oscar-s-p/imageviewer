@@ -42,7 +42,9 @@ class image_viewer:
                previous_df = False,
                print_error = True,
                bad_format = False,
-               im_type_input = False):
+               im_type_input = False,
+               list_files = False,
+               ):
         """Class to quickly open FITS images. Searches in given directory.
         
         Attributes
@@ -131,6 +133,8 @@ class image_viewer:
 
         # list of images in dir_img and where were they
         files = list(Path(self.dir_img).glob('*.fits'))
+        if type(list_files)==list:
+            files+=list_files
         folder_found = ['']*len(files)
         # list of images in the different folders of folder_list and the corresponding folder
         if folder_list!= []:
