@@ -140,10 +140,13 @@ class image_viewer:
         folder_found = ['']*len(files)
         # list of images in the different folders of folder_list and the corresponding folder
         if folder_list!= []:
-            for fl in folder_list:
-                fi = list(Path(os.path.join(self.dir_img, fl)).glob('*.fits'))
-                files=files+fi
-                folder_found =folder_found+[fl]*len(fi)
+            if type(list_files)==bool:
+                for fl in folder_list:
+                    fi = list(Path(os.path.join(self.dir_img, fl)).glob('*.fits'))
+                    files=files+fi
+                    folder_found =folder_found+[fl]*len(fi)
+            else:
+                folder_found = folder_list
 
         files_data = []
         # creation of data dictionary
