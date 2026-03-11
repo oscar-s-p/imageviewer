@@ -1112,6 +1112,10 @@ class image_viewer:
                                     facecolor = 'none',
                                     transform = ax.get_transform('icrs'))
                 ax.add_patch(c)
+                if label!=None:
+                    ax.text((Angle(center[0]), Angle(center[1])), label,
+                            transform=ax.get_transform('icrs'),
+                            color=color)
         
         # optional plot of arrows
         if arrows:
