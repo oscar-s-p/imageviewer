@@ -1102,18 +1102,20 @@ class image_viewer:
                 add_circle = [add_circle]
             for d_circle in add_circle:
                 center = d_circle.get('center')
+                if type(center[0])==str or type(center[0])==float: center_ang = (Angle(center[0]), Angle(center[1]))
+                else: center_ang = center
                 size = d_circle.get('size')
                 if 'color' not in d_circle: color = 'white'
                 else: color = d_circle.get('color')
                 label = d_circle.get('label')
-                c = SphericalCircle((Angle(center[0]), Angle(center[1])),
+                c = SphericalCircle((center_ang[0], center_ang[1]),
                                     Angle(size),
                                     edgecolor = color,
                                     facecolor = 'none',
                                     transform = ax.get_transform('icrs'))
                 ax.add_patch(c)
                 if label!=None:
-                    ax.text(Angle(center[0]).deg, Angle(center[1]).deg, label,
+                    ax.text(center_ang[0].deg, center_ang[1].deg, label,
                             transform=ax.get_transform('icrs'),
                             color=color)
         
