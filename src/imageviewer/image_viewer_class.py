@@ -2,7 +2,7 @@
 Image viewer class
 '''
 
-import os, sys, glob
+import os, sys, glob, traceback
 from pathlib import Path
 import datetime as dt
 import numpy as np
@@ -1097,27 +1097,34 @@ class image_viewer:
         ax.minorticks_on()
 
         # Optional plot of circles
-        if add_circle is not None:
-            if type(add_circle) != list:
-                add_circle = [add_circle]
-            for d_circle in add_circle:
-                center = d_circle.get('center')
-                if type(center[0])==str or type(center[0])==float: center_ang = (Angle(center[0]), Angle(center[1]))
-                else: center_ang = center
-                size = d_circle.get('size')
-                if 'color' not in d_circle: color = 'white'
-                else: color = d_circle.get('color')
-                label = d_circle.get('label')
-                c = SphericalCircle((center_ang[0], center_ang[1]),
-                                    Angle(size),
-                                    edgecolor = color,
-                                    facecolor = 'none',
-                                    transform = ax.get_transform('icrs'))
-                ax.add_patch(c)
-                if label!=None:
-                    ax.text(center_ang[0].deg, center_ang[1].deg, label,
-                            transform=ax.get_transform('icrs'),
-                            color=color)
+        try:
+            if add_circle is not None:
+                if type(add_circle) != list:
+                    add_circle = [add_circle]
+                for d_circle in add_circle:
+                    center = d_circle.get('center')
+                    if type(center[0])==str: 
+                        center_ang = (Angle(center[0]), Angle(center[1]))
+                    elif isinstance(center[0], (float, np.floating)):
+                        center_ang = (Angle(center[0], unit = 'deg'), Angle(center[1], unit = 'deg')) 
+                    else: center_ang = center
+                    size = d_circle.get('size')
+                    if 'color' not in d_circle: color = 'white'
+                    else: color = d_circle.get('color')
+                    label = d_circle.get('label')
+                    c = SphericalCircle((center_ang[0], center_ang[1]),
+                                        Angle(size),
+                                        edgecolor = color,
+                                        facecolor = 'none',
+                                        transform = ax.get_transform('icrs'))
+                    ax.add_patch(c)
+                    if label!=None:
+                        ax.text(center_ang[0].deg, center_ang[1].deg, label,
+                                transform=ax.get_transform('icrs'),
+                                color=color)
+        except Exception as e:
+            traceback.print_exc()
+
         
         # optional plot of arrows
         if arrows:
