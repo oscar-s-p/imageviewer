@@ -3,6 +3,7 @@ Photometric analysis functions:
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredDirectionArrows
 import ipywidgets as widgets
 from IPython.display import display
@@ -66,6 +67,8 @@ def photo_analysis(filename,
         wcs = WCS(header)
 
     fil = header['FILTER'] if 'FILTER' in header else 'Unknown filter'
+    if fil=='SDSSzs':
+        fil = 'SDSSz'
     
     print('\n-----------------------------------------------------------')
     print('Photometric analysis of image %s'%(filename))
@@ -320,6 +323,11 @@ def get_catalogue(filename,
                   scalebar_arcsec = 60,
                   ):
     
+    if catalogue not in ['Simbad', 'SDSS', 'PanSTARRS', 'Gaia']:
+        print('ERROR: the seelected catalogue is not in the list of known catalogues.')
+        print(' - %s'%['Simbad', 'SDSS', 'PanSTARRS', 'Gaia'])
+        return
+
     with fits.open(filename) as hdul:
         hdu = hdul[0]
         header = hdu.header #type: ignore
@@ -740,6 +748,7 @@ def get_magnitude(filename,
                   pix_dist = 5,
                   print_info = False,
                   plot = False,
+                  plot_rad_pix = False,
                   n_fig = 99,
                   ):
     
@@ -766,6 +775,7 @@ def get_magnitude(filename,
         print('--------------------------------------------')
 
     if plot:
+        pix_radius = np.sqrt(photometry_table['npixfit'][closest_idx]/np.pi)
         plt.close(n_fig)
         fig, ax = plt.subplots(num = n_fig)
         ax.remove()
@@ -774,9 +784,15 @@ def get_magnitude(filename,
         xstar, ystar = int(px_coords[0]), int(px_coords[1])
         rad = int(dist[closest_idx]*1.5)
         if rad < 10: rad = 10
+        if plot_rad_pix!=False: rad = plot_rad_pix
         ax.imshow(data[y-rad:y+rad, x-rad:x+rad], cmap='gray', origin='lower')
         ax.plot(xstar-(x-rad), ystar-(y-rad), 'rx', label='Input star')
         ax.plot(x-(x-rad), y-(y-rad), 'b+', label='Closest star')
+        c = Circle((rad, rad),
+                    pix_radius,
+                    edgecolor = 'blue',
+                    facecolor = 'none')
+        ax.add_patch(c)
         ax.legend()
         ax.set_xlabel('RA')
         ax.set_ylabel('DEC')
