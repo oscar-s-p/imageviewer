@@ -299,6 +299,11 @@ def photo_analysis(filename,
     phot_g_all['mag_calib'] = phot_g_all['mag_inst'] + ZP_mean
     phot_g_all['mag_calib_err'] = np.sqrt(phot_g_all['mag_inst_err']**2+ZP_std**2)  # type: ignore
 
+    # Calculate fitted ra dec
+    radec_phot = wcs.pixel_to_world(phot_g_all['x_fit'], phot_g_all['y_fit']) # type: ignore
+    phot_g_all['ra_fit'] = radec_phot.ra.deg # type: ignore
+    phot_g_all['dec_fit'] = radec_phot.dec.deg # type: ignore
+
     if plot:
         n_fig += 1
         plt.close(n_fig)
