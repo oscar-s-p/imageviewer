@@ -746,6 +746,7 @@ def get_coordinates(filename,
 def get_magnitude(filename, 
                   photometry_table, 
                   coords,
+                  multiple_stars = False,
                   pix_dist = 5,
                   print_info = False,
                   plot = False,
@@ -753,56 +754,73 @@ def get_magnitude(filename,
                   n_fig = 99,
                   ):
     
-    if type(coords) is not SkyCoord: sky_coords = SkyCoord(coords)
-    else: sky_coords = coords
-    
+    if multiple_stars == False:
+        if type(coords) is not SkyCoord: sky_coords = SkyCoord(coords)
+        else: sky_coords = coords
+        sky_coords_list = [sky_coords]
+    else:
+        if type(coords) is not list:
+            print('If multiple_stars is True, coords should be a list of coordinates.')
+            return None
+        sky_coords_list = []
+        for c in coords:
+            if type(c) is not SkyCoord: sky_coords_list.append(SkyCoord(c))
+            else: sky_coords_list.append(c)
+
     with fits.open(filename) as hdul:
         hdu = hdul[0]
         header = hdu.header #type: ignore
         data = hdu.data #type: ignore
         wcs = WCS(header)
-
-    px_coords = skycoord_to_pixel(sky_coords, wcs)
-    # Find the closest photometry entry to the given coordinates
-    phot_xy = np.array([photometry_table["x_fit"], photometry_table["y_fit"]]).T
-    dist = np.sqrt((phot_xy[:, 0] - px_coords[0])**2 + (phot_xy[:, 1] - px_coords[1])**2)
-    closest_idx = np.argmin(dist)
-    if print_info: 
-        print('----------- get_magnitude info -----------')
-        print('Input star:   x y = %f %f  |  RA Dec = %f %f'%(px_coords[0], px_coords[1], sky_coords.ra.deg, sky_coords.dec.deg))  # type: ignore
-        closest_radec = wcs.pixel_to_world(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1])
-        print('Closest star: x y = %f %f  |  RA Dec = %f %f'%(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1], closest_radec.ra.deg, closest_radec.dec.deg))  # type: ignore
-        print('Closest star magnitude: %f at distance %.2f pixels'%(photometry_table['mag_calib'][closest_idx], dist[closest_idx]))
-        print('--------------------------------------------')
-
-    if plot:
-        pix_radius = np.sqrt(photometry_table['npixfit'][closest_idx]/np.pi)
-        plt.close(n_fig)
-        fig, ax = plt.subplots(num = n_fig)
-        ax.remove()
-        ax = fig.add_subplot(111, projection = wcs)
-        x, y = int(phot_xy[closest_idx, 0]), int(phot_xy[closest_idx, 1])
-        xstar, ystar = int(px_coords[0]), int(px_coords[1])
-        rad = int(dist[closest_idx]*1.5)
-        if rad < 10: rad = 10
-        if plot_rad_pix!=False: rad = plot_rad_pix
-        ax.imshow(data[y-rad:y+rad, x-rad:x+rad], cmap='gray', origin='lower')
-        ax.plot(xstar-(x-rad), ystar-(y-rad), 'rx', label='Input star')
-        ax.plot(x-(x-rad), y-(y-rad), 'b+', label='Closest star')
-        c = Circle((rad, rad),
-                    pix_radius,
-                    edgecolor = 'blue',
-                    facecolor = 'none')
-        ax.add_patch(c)
-        ax.legend()
-        ax.set_xlabel('RA')
-        ax.set_ylabel('DEC')
-        plt.show()
-
-    if dist[closest_idx] < pix_dist: # if the closest star is within 5 pixels, return its magnitude
-        return [photometry_table['mag_calib'][closest_idx],photometry_table['mag_calib_err'][closest_idx]]
-    else: 
-        print('No star found within %d pixels of the given coordinates.'%pix_dist)
-        print('- Closest star at %.1f pixels'%dist[closest_idx])
-        return [None, None]
     
+    phot_xy = np.array([photometry_table["x_fit"], photometry_table["y_fit"]]).T
+
+    return_mags = []
+    for sky_coords in sky_coords_list:
+        px_coords = skycoord_to_pixel(sky_coords, wcs)
+        # Find the closest photometry entry to the given coordinates
+        dist = np.sqrt((phot_xy[:, 0] - px_coords[0])**2 + (phot_xy[:, 1] - px_coords[1])**2)
+        closest_idx = np.argmin(dist)
+        if print_info: 
+            print('----------- get_magnitude info -----------')
+            print('Input star:   x y = %f %f  |  RA Dec = %f %f'%(px_coords[0], px_coords[1], sky_coords.ra.deg, sky_coords.dec.deg))  # type: ignore
+            closest_radec = wcs.pixel_to_world(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1])
+            print('Closest star: x y = %f %f  |  RA Dec = %f %f'%(phot_xy[closest_idx, 0], phot_xy[closest_idx, 1], closest_radec.ra.deg, closest_radec.dec.deg))  # type: ignore
+            print('Closest star magnitude: %f at distance %.2f pixels'%(photometry_table['mag_calib'][closest_idx], dist[closest_idx]))
+            print('--------------------------------------------')
+
+        if plot:
+            pix_radius = np.sqrt(photometry_table['npixfit'][closest_idx]/np.pi)
+            plt.close(n_fig)
+            fig, ax = plt.subplots(num = n_fig)
+            ax.remove()
+            ax = fig.add_subplot(111, projection = wcs)
+            x, y = int(phot_xy[closest_idx, 0]), int(phot_xy[closest_idx, 1])
+            xstar, ystar = int(px_coords[0]), int(px_coords[1])
+            rad = int(dist[closest_idx]*1.5)
+            if rad < 10: rad = 10
+            if plot_rad_pix!=False: rad = plot_rad_pix
+            ax.imshow(data[y-rad:y+rad, x-rad:x+rad], cmap='gray', origin='lower')
+            ax.plot(xstar-(x-rad), ystar-(y-rad), 'rx', label='Input star')
+            ax.plot(x-(x-rad), y-(y-rad), 'b+', label='Closest star')
+            c = Circle((rad, rad),
+                        pix_radius,
+                        edgecolor = 'blue',
+                        facecolor = 'none')
+            ax.add_patch(c)
+            ax.legend()
+            ax.set_xlabel('RA')
+            ax.set_ylabel('DEC')
+            plt.show()
+
+        if dist[closest_idx] < pix_dist: # if the closest star is within 5 pixels, return its magnitude
+            return_mags.append([photometry_table['mag_calib'][closest_idx], photometry_table['mag_calib_err'][closest_idx]])
+        else:
+            if print_info:
+                print('No star found within %d pixels of the given coordinates.'%pix_dist)
+                print('- Closest star at %.1f pixels'%dist[closest_idx])
+            return_mags.append([None, None])
+    if multiple_stars == False:
+        return return_mags[0]
+    else:
+        return return_mags     
