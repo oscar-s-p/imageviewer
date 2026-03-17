@@ -241,8 +241,9 @@ def photo_analysis(filename,
         ax.scatter(phot_all['x_fit'][sat_gi], phot_all['y_fit'][sat_gi], marker = 'P',
                 facecolor = 'none', edgecolor = 'purple', label = 'bad (saturation)')
         
-        for i in range(len(phot_g_all)):
-            plt.text(phot_g_all['x_fit'][i]+10, phot_g_all['y_fit'][i], phot_g_all['flux_id'][i]) # type: ignore
+        if len(phot_g_all) < 200:
+            for i in range(len(phot_g_all)):
+                plt.text(phot_g_all['x_fit'][i]+10, phot_g_all['y_fit'][i], phot_g_all['flux_id'][i]) # type: ignore
         ax.legend(ncols = 4, bbox_to_anchor = (0.5,1.08,0,0), loc='center')
 
         ax.set_xlabel('RA')
