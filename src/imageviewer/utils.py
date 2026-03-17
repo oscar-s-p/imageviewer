@@ -4,13 +4,15 @@ Utility functions for image viewer
 - `filter_df`: Filter the dataframe of FITS files based on specified criteria (e.g., seeing, moon phase, integration time, zero point).
 - `final_wcs`: Compute the final World Coordinate System (WCS) for an image, taking into account any necessary corrections or adjustments.
 - `stacking_wcs`: Compute the WCS for a stacked image, which may involve combining multiple exposures and accounting for any shifts or rotations between them.
+- `skycoord_from_df`: Create an astropy SkyCoord object from a dataframe containing RA and DEC columns.
+- `cross_match_radec`: Cross-match two dataframes based on their RA and DEC columns, returning a new dataframe with matched entries.
 """
 
 import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from astropy.coordinates import Angle
+from astropy.coordinates import Angle, SkyCoord
 from astropy import units as u
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -343,3 +345,30 @@ def stacking_wcs(df, indexes, template_out, # w_out, shape_out,
     hdul = fits.HDUList([hdu])
     hdul.writeto(object+'_image/'+df.iloc[indexes[0]]['filter']+add_name+".fits", overwrite=True)
     
+
+def skycoord_from_df(df, ra_col='ra', dec_col='dec'):
+    """Create an astropy SkyCoord object from a dataframe containing RA and DEC columns."""
+    return SkyCoord(ra=df[ra_col].values * u.deg, dec=df[dec_col].values * u.deg)
+
+
+def cross_match_radec(df_ref, df_cat, 
+                      ra_ref='ra', dec_ref='dec',
+                      ra_cat='ra', dec_cat='dec',
+                      tolerance_arcsec=2.0,
+                      suffix_cat='_cat'):
+    """
+    Cross-match df_ref against df_cat by (RA, Dec).
+    Returns df_ref with matched columns from df_cat appended (NaN if no match within tolerance).
+    """
+    sc_ref = skycoord_from_df(df_ref, ra_ref, dec_ref)
+    sc_cat = skycoord_from_df(df_cat, ra_cat, dec_cat)
+    
+    idx, sep, _ = sc_ref.match_to_catalog_sky(sc_cat)
+    matched_mask = sep.arcsec < tolerance_arcsec # type: ignore
+    
+    df_matched = df_cat.iloc[idx].reset_index(drop=True).add_suffix(suffix_cat)
+    df_matched['sep_arcsec' + suffix_cat] = sep.arcsec
+    df_matched[~matched_mask] = np.nan  # zero out non-matches
+    
+    return pd.concat([df_ref.reset_index(drop=True), df_matched], axis=1)
+

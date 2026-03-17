@@ -12,4 +12,6 @@ from importlib.metadata import version as _version
 __version__ = _version("imageviewer")
 __all__ = ["image_viewer", 
            "final_wcs", "filter_df", "stacking_wcs", 
-           "photo_analysis", "detect_sources", "get_magnitude", "get_coordinates", "get_catalogue"]
+           "skycoord_from_df", "cross_match_radec",
+           "photo_analysis", "detect_sources", "get_magnitude", 
+           "get_coordinates", "get_catalogue"]
