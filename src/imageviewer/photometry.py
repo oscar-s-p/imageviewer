@@ -528,7 +528,215 @@ def get_catalogue(filename,
     return return_table
 
 
-def detect_sources(filename, 
+def explore_catalogues(filename,
+                       filter,
+                       mag_range=(13, 22),
+                       catalogues=None,
+                       include_gaia=False,
+                       gaia_mag_limit=22.0,
+                       ):
+    """
+    Compare star catalogue coverage over the actual detector footprint of a FITS image.
+
+    For each catalogue the function:
+    1. Calls get_catalogue() to query the sky bounding-box around the image.
+    2. Projects every returned star to pixel coordinates via the image WCS.
+    3. Labels stars that fall inside the detector boundary as on_detector.
+    4. Plots the image with green (on-detector) and red (outside) circles plus
+       a magnitude histogram of the usable population.
+
+    Parameters
+    ----------
+    filename      : str  — path to a representative FITS file
+    filter        : str  — single filter letter, e.g. 'g' for SDSSg images
+    mag_range     : tuple (bright, faint) — magnitude limits for calibration stars
+    catalogues    : list of str — any subset of ['SDSS', 'PanSTARRS', 'Simbad']
+                    (default: all three)
+    include_gaia  : bool — also query Gaia DR3 via Vizier (returns G-band magnitudes,
+                    NOT the SDSS-filter magnitude; shown for coverage comparison only)
+    gaia_mag_limit: float — Gaia G-mag faint limit when include_gaia=True
+
+    Returns
+    -------
+    dict {catalogue_name: pandas DataFrame of stars on the detector}
+    """
+    if catalogues is None:
+        catalogues = ['SDSS', 'PanSTARRS', 'Simbad']
+
+    with fits.open(filename) as hdul:
+        data    = hdul[0].data.astype(float)  # type: ignore
+        header  = hdul[0].header               # type: ignore
+        wcs_img = WCS(header)
+
+    ny, nx = data.shape
+    _, sky_med, sky_std = sigma_clipped_stats(data, sigma=3, maxiters=5)
+
+    # ── Query each catalogue ──────────────────────────────────────────────────
+    cat_results = {}   # {name: {'df': DataFrame, 'mag_col': str} | None}
+
+    for cat_name in catalogues:
+        print(f'Querying {cat_name} ...', end='  ', flush=True)
+        try:
+            cat_table = get_catalogue(
+                filename,
+                catalogue=cat_name,
+                filter=[filter],
+                mag_range=mag_range,
+                plot=False,
+                print_info=False,
+            )
+        except Exception as e:
+            print(f'FAILED: {e}')
+            cat_results[cat_name] = None
+            continue
+        if cat_table is None or len(cat_table) == 0:
+            print('0 stars returned.')
+            cat_results[cat_name] = None
+            continue
+        df = cat_table.to_pandas()
+        print(f'{len(df)} stars in query area')
+        cat_results[cat_name] = {'df': df, 'mag_col': filter}
+
+    # ── Optional: Gaia DR3 via Vizier (G band) ───────────────────────────────
+    if include_gaia:
+        print('Querying Gaia DR3 (Vizier) ...', end='  ', flush=True)
+        try:
+            sc_ctr = SkyCoord(ra=header['CRVAL1'] * u.deg, dec=header['CRVAL2'] * u.deg)
+            corners_sky = wcs_img.pixel_to_world(
+                np.array([0, nx - 1, nx - 1, 0]),
+                np.array([0, 0,      ny - 1, ny - 1]),
+            )
+            r_arcmin = max(
+                sc_ctr.separation(c).to(u.arcmin).value for c in corners_sky
+            ) * u.arcmin
+            v = Vizier(catalog='I/355/gaiadr3',
+                       columns=['RA_ICRS', 'DE_ICRS', 'Gmag', 'BP-RP'],
+                       row_limit=-1,
+                       column_filters={'Gmag': f'< {gaia_mag_limit}'})
+            res = v.query_region(sc_ctr, radius=r_arcmin)
+            if res and len(res) > 0:
+                gdf = res[0].to_pandas().rename(columns={'RA_ICRS': 'ra', 'DE_ICRS': 'dec'})
+                print(f'{len(gdf)} stars in query area')
+                cat_results['Gaia DR3 (G)'] = {'df': gdf, 'mag_col': 'Gmag'}
+            else:
+                print('0 stars returned.')
+                cat_results['Gaia DR3 (G)'] = None
+        except Exception as e:
+            print(f'FAILED: {e}')
+            cat_results['Gaia DR3 (G)'] = None
+
+    # ── Project to pixels, flag on/off detector ───────────────────────────────
+    on_counts = {}
+    for cat_name, entry in cat_results.items():
+        if entry is None:
+            on_counts[cat_name] = 0
+            continue
+        df = entry['df']
+        coords = SkyCoord(ra=df['ra'].values * u.deg, dec=df['dec'].values * u.deg)
+        x_pix, y_pix = wcs_img.world_to_pixel(coords)
+        df['x_pix'] = x_pix
+        df['y_pix'] = y_pix
+        df['on_detector'] = ((x_pix >= 0) & (x_pix < nx) &
+                             (y_pix >= 0) & (y_pix < ny))
+        on_counts[cat_name] = int(df['on_detector'].sum())
+
+    # ── Figure ────────────────────────────────────────────────────────────────
+    n_cols = len(cat_results)
+    if n_cols == 0:
+        print('No catalogue results to display.')
+        return {}
+
+    vmin_img = sky_med - 3 * sky_std
+    vmax_img = sky_med + 3 * sky_std
+    best_n   = max(on_counts.values()) if on_counts else 0
+
+    fig, axes = plt.subplots(2, n_cols, figsize=(5.5 * n_cols, 10))
+    if n_cols == 1:
+        axes = axes.reshape(2, 1)
+
+    for col, (cat_name, entry) in enumerate(cat_results.items()):
+        ax_img  = axes[0, col]  # type: ignore
+        ax_hist = axes[1, col]  # type: ignore
+
+        ax_img.imshow(data, origin='lower', cmap='gray',
+                      vmin=vmin_img, vmax=vmax_img,
+                      aspect='equal', interpolation='nearest')
+        ax_img.set_xlim(-nx * 0.05, nx * 1.05)
+        ax_img.set_ylim(-ny * 0.05, ny * 1.05)
+
+        if entry is not None:
+            df      = entry['df']
+            mag_col = entry['mag_col']
+            on  = df['on_detector']
+            off = ~on
+
+            if off.sum() > 0:
+                ax_img.scatter(df.loc[off, 'x_pix'], df.loc[off, 'y_pix'],
+                               facecolor='none', edgecolor='tomato',
+                               s=50, lw=0.9, label=f'outside ({off.sum()})', zorder=3)
+            if on.sum() > 0:
+                ax_img.scatter(df.loc[on, 'x_pix'], df.loc[on, 'y_pix'],
+                               facecolor='none', edgecolor='lime',
+                               s=70, lw=1.3, label=f'on detector ({on.sum()})', zorder=4)
+
+            n_on    = int(on.sum())
+            n_tot   = len(df)
+            suffix  = ' ★' if (n_on == best_n and best_n > 0) else ''
+            ax_img.set_title(f'{cat_name}{suffix}\n{n_on} / {n_tot} stars on detector',
+                             fontsize=10, fontweight='bold' if suffix else 'normal')
+            ax_img.legend(fontsize=7, loc='upper right')
+
+            mag_label = (f'{filter}-band' if mag_col == filter else 'G-band (not SDSS-g)')
+            lo = mag_range[0] if mag_col == filter else float(df[mag_col].min())
+            hi = mag_range[1] if mag_col == filter else float(df[mag_col].max())
+            bins = np.linspace(lo, hi, 30)
+            if on.sum() > 0:
+                ax_hist.hist(df.loc[on,  mag_col].dropna(), bins=bins,
+                             color='lime', edgecolor='white', alpha=0.85,
+                             label=f'on detector (n={n_on})')
+            if off.sum() > 0:
+                ax_hist.hist(df.loc[off, mag_col].dropna(), bins=bins,
+                             color='salmon', edgecolor='white', alpha=0.6,
+                             label=f'outside (n={int(off.sum())})')
+            ax_hist.set_xlabel(f'{cat_name}  {mag_label}')
+            ax_hist.legend(fontsize=7)
+        else:
+            for ax in (ax_img, ax_hist):
+                ax.text(0.5, 0.5, f'{cat_name}\nquery failed\nor no stars',
+                        ha='center', va='center', transform=ax.transAxes,
+                        color='red', fontsize=10)
+            ax_img.set_title(cat_name)
+
+        ax_img.set_xlabel('x (pix)')
+        if col == 0:
+            ax_img.set_ylabel('y (pix)')
+            ax_hist.set_ylabel('N stars')
+
+    plt.suptitle(
+        f'Catalogue coverage — {filename.split("/")[-1]}\n'
+        f'green = on detector  ·  red = outside bounding-box',
+        fontsize=11, y=1.01)
+    plt.tight_layout()
+    plt.show()
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    print('\n── On-detector star count ────────────────────────────────────────────')
+    print(f'   Detector: {nx} × {ny} pix')
+    for cat_name, entry in cat_results.items():
+        if entry is None:
+            print(f'   {cat_name:16s}: query failed')
+            continue
+        n_on  = int(entry['df']['on_detector'].sum())
+        n_tot = len(entry['df'])
+        flag  = '  ← most stars' if (n_on == best_n and best_n > 0) else ''
+        print(f'   {cat_name:16s}: {n_on:4d} / {n_tot} on detector{flag}')
+    print('\n→ Pass the winning catalogue name to get_catalogue() or set PHOT_CATALOGUE in §0.')
+
+    return {k: v['df'][v['df']['on_detector']].copy()
+            for k, v in cat_results.items() if v is not None}
+
+
+def detect_sources(filename,
                    method = 'find_peaks',
                    sky_sigma = 3.0,
                    maxiters = 5,
