@@ -32,6 +32,7 @@ import photutils.psf as psf
 from photutils.detection import IRAFStarFinder, find_peaks
 
 from scipy.spatial import cKDTree # type: ignore
+from scipy.ndimage import binary_dilation
 
 
 def photo_analysis(filename,
@@ -736,6 +737,48 @@ def explore_catalogues(filename,
             for k, v in cat_results.items() if v is not None}
 
 
+def build_known_mask(filename, coords_df, fwhm_pix=None):
+    """
+    Build a boolean pixel mask with True where known sources are located.
+
+    Parameters
+    ----------
+    filename : str
+        Path to a FITS image (used for WCS and image dimensions).
+    coords_df : pd.DataFrame
+        Must contain columns 'ra' and 'dec' (degrees) of known source positions.
+    fwhm_pix : float, optional
+        Mask radius = ceil(2 × fwhm_pix). If None, reads FWHM from FITS header (default 3.0).
+
+    Returns
+    -------
+    np.ndarray  (dtype=bool, shape=(NAXIS2, NAXIS1))  True = masked (known source)
+    """
+    with fits.open(filename) as hdul:
+        header = hdul[0].header
+    wcs_obj = WCS(header)
+    naxis1, naxis2 = header['NAXIS1'], header['NAXIS2']
+    if fwhm_pix is None:
+        fwhm_pix = header.get('FWHM', 3.0)
+
+    coords = SkyCoord(ra=coords_df['ra'].values * u.deg,
+                      dec=coords_df['dec'].values * u.deg)
+    x_pix, y_pix = skycoord_to_pixel(coords, wcs_obj)
+
+    point_mask = np.zeros((naxis2, naxis1), dtype=bool)
+    for xi, yi in zip(x_pix, y_pix):
+        if np.isnan(xi) or np.isnan(yi):
+            continue
+        xi_i, yi_i = int(round(float(xi))), int(round(float(yi)))
+        if 0 <= xi_i < naxis1 and 0 <= yi_i < naxis2:
+            point_mask[yi_i, xi_i] = True
+
+    radius = int(np.ceil(2 * fwhm_pix))
+    r_y, r_x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+    disk_struct = (r_x ** 2 + r_y ** 2) <= radius ** 2
+    return binary_dilation(point_mask, structure=disk_struct)
+
+
 def detect_sources(filename,
                    method = 'find_peaks',
                    sky_sigma = 3.0,
@@ -744,6 +787,7 @@ def detect_sources(filename,
                    fwhm = 3.0,
                    init_table = None,
                    add_sources = False,
+                   mask = None,
                    plot = True):
     
     with fits.open(filename) as hdul:
@@ -783,7 +827,7 @@ def detect_sources(filename,
         # Source detection
         if method == 'IRAF':
             iraf_finder = IRAFStarFinder(threshold=threshold_method, fwhm=fwhm, peakmax=60000)
-            iraf_stars = iraf_finder(data_sub)
+            iraf_stars = iraf_finder(data_sub, mask=mask)
             iraf_stars.remove_rows(np.where(iraf_stars['peak'] > 60000)) 
             print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
             # sorting list of found stars
@@ -797,9 +841,10 @@ def detect_sources(filename,
             xlab, ylab = 'xcentroid', 'ycentroid'
             
         elif method == 'find_peaks':
-            fp_sources = find_peaks(data_sub, threshold=threshold_method, 
+            fp_sources = find_peaks(data_sub, threshold=threshold_method,
                                     box_size=int(fwhm),
-                                    wcs = WCS(header))
+                                    wcs = WCS(header),
+                                    mask=mask)
             print('- Sources found by find_peaks: %d'%len(fp_sources)) # type: ignore
             fp_sources.remove_rows(np.where(fp_sources['peak_value'] > 60000)) # type: ignore
             detect_table = fp_sources
