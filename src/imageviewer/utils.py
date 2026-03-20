@@ -372,3 +372,40 @@ def cross_match_radec(df_ref, df_cat,
     
     return pd.concat([df_ref.reset_index(drop=True), df_matched], axis=1)
 
+
+def build_ttt_fits_path(row, base_dir):
+    """
+    Construct the full path to a reduced FITS file for TTT observatory images.
+
+    The naming convention has two variants split at 2024-11-17:
+    - After  2024-11-17: {date}/{telescop}_{camera}_{YYYY-MM-DD}-{HH-MM-SS-ffffff}_{object}_{filter}.fits
+    - Before 2024-11-17: {date}/{telescop}_{camera}_{YYYY-MM-DD}-{HH-MM-SS-ffffff}_{object}.fits
+
+    The observing-night date directory accounts for the UTC midnight crossing:
+    images taken before 12:00 UTC belong to the previous calendar night.
+
+    Parameters
+    ----------
+    row : pd.Series
+        Row from a best_per_night DataFrame.  Required columns:
+        ``dateobs`` (datetime), ``telescop`` (str), ``camera`` (str),
+        ``object`` (str), ``filter`` (str, only needed post-2024-11-17).
+    base_dir : str
+        Root directory where reduced images are stored
+        (e.g. '/home/jovyan/work/red' on JupyterHub).
+
+    Returns
+    -------
+    str  Full absolute path to the FITS file.
+    """
+    night = (row['dateobs'] - pd.Timedelta(days=1)
+             if row['dateobs'].hour < 12 else row['dateobs'])
+    date_str  = night.strftime('%Y-%m-%d')
+    time_str  = row['dateobs'].strftime('%Y-%m-%d-%H-%M-%S-%f')
+    if night > pd.Timestamp('2024-11-17'):
+        fname = (f"{row['telescop']}_{row['camera']}_{time_str}"
+                 f"_{row['object']}_{row['filter']}.fits")
+    else:
+        fname = f"{row['telescop']}_{row['camera']}_{time_str}_{row['object']}.fits"
+    return os.path.join(base_dir, date_str, fname)
+

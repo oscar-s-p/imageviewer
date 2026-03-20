@@ -697,10 +697,19 @@ class image_viewer:
                         'max_percentile' : 99,
                         'max_sky' : False
                         },
-                    iloc = False
+                    iloc = False,
+                    return_fig = False,
                     ):
         """
         Method to view images. Takes dictionary keywords for ``data_manipulation`` and ``plotting``.
+
+        Parameters
+        ----------
+        return_fig : bool, optional
+            If True, skip plt.show() and return (fig, ax) for a single image or
+            (fig, [ax, ...]) for multiple images. The returned axes are WCSAxes
+            projections, so overlays can be added with ax.scatter(...,
+            transform=ax.get_transform('icrs')) using RA/Dec degree values.
         """
         # Multiple images
         if type(image) == list and RGB == False:
@@ -746,20 +755,22 @@ class image_viewer:
         if n_image == 1: axes = [axes]
         axes = np.array(axes).reshape(-1)
         
+        wcs_axes = []
         for i, (img, m_k, p_k) in enumerate(zip(image_list, manipulation_kw, plotting_kw)):
             self.img_str, self.img_int = self.return_index(img, iloc = iloc) # type: ignore
             if iloc: df_file = self.df_files.iloc[self.img_int]
             else: df_file = self.df_files.loc[self.img_int]
             try:
                 cutout, norm = self.data_manipulation(self.img_str, iloc = iloc, **m_k) # type: ignore
-            
+
                 if RGB == False:
                     if self.bad_format==False:
                         print('    Object: ', df_file['object'],
                             '  -  Filter: ', df_file['filter'])
-                    self.plotting(cutout, norm, fig, axes[i], i,
+                    wcs_ax = self.plotting(cutout, norm, fig, axes[i], i,
                                 iloc = iloc,
                                 **p_k)
+                    wcs_axes.append(wcs_ax)
                 else:
                     # Extracting data from header
                     with fits.open(os.path.join(self.dir_img, self.img_str)) as hdul: # type: ignore
@@ -778,20 +789,26 @@ class image_viewer:
                     data[data_mask] = 1e-3
                     cutout_RGB.append(data)
 
-                    if i == len(image_list)-1:                        
+                    if i == len(image_list)-1:
                         rgb_default = make_lupton_rgb(cutout_RGB[0].data, cutout_RGB[1].data, cutout_RGB[2].data,
                                                     **RGB_kw)
-                        self.plotting(cutout, norm, fig, axes[0],0,
+                        wcs_ax = self.plotting(cutout, norm, fig, axes[0],0,
                                     RGB = True, rgb_data = rgb_default,
                                     iloc = iloc,
                                     **plotting_kw[i])
+                        wcs_axes.append(wcs_ax)
             except Exception as error:
                 print('Error with image ', self.img_str)
                 print(type(error).__name__, '-', error)
         plt.tight_layout()
         if type(save_name) == str:
             plt.savefig(save_name, dpi=300)
-        plt.show()
+        if return_fig:
+            ax_out = wcs_axes[0] if n_image == 1 else wcs_axes
+            return fig, ax_out
+        else: plt.show()
+
+        
 
     def data_manipulation(self, image_str,
                           centered = True, 
@@ -1137,6 +1154,8 @@ class image_viewer:
                                            fontsize=0.03
                                            )
             ax.add_artist(arrs)
+
+        return ax
 
     def read_data(self, image, header = False, iloc = False):
         """Method to view images."""
