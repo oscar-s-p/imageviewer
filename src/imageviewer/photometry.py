@@ -824,6 +824,7 @@ def detect_sources(filename,
         threshold_method =  (sky_std * sky_threshold)
         print('- %s threshold: %.2f'%(methods_dict[method], threshold_method))
         print('Detecting sources...')
+        print(' - Using mask for known sources: %s'%('Yes' if mask is not None else 'No'))
         # Source detection
         if method == 'IRAF':
             iraf_finder = IRAFStarFinder(threshold=threshold_method, fwhm=fwhm, peakmax=60000)
