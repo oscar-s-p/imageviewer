@@ -788,7 +788,9 @@ def detect_sources(filename,
                    init_table = None,
                    add_sources = False,
                    mask = None,
-                   plot = True):
+                   plot = True,
+                   print_info = True,
+                   ):
     
     with fits.open(filename) as hdul:
         hdu = hdul[0]
@@ -800,37 +802,39 @@ def detect_sources(filename,
                     'find_peaks': 'find_peaks'}
 
     # Background estimation and substraction
-    print('Removing sky background...')
+    if print_info: print('Removing sky background...')
     sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=sky_sigma, maxiters=maxiters)
     bkg = sky_mean
     data_sub = data - bkg
-    print('- Sky background mean: %.2f; Sky background std: %.2f'%(sky_mean, sky_std))
+    if print_info: print('- Sky background mean: %.2f; Sky background std: %.2f'%(sky_mean, sky_std))
 
     if init_table is None:
-        print('No initial table provided. Will perform source detection on the image.')
-        print('If you want to save the output table: table.to_pandas().to_pickle("./table.pkl")')
+        if print_info: 
+            print('No initial table provided. Will perform source detection on the image.')
+            print('If you want to save the output table: table.to_pandas().to_pickle("./table.pkl")')
         
         if 'FWHM'  in header:
             fwhm = header['FWHM']
         elif 'seeing' in header:
             fwhm = header['seeing'] / header['SCALE']
         else:
-            print("FWHM not found in header. Using input value fwhm = %s."%fwhm)
+            if print_info: print("FWHM not found in header. Using input value fwhm = %s."%fwhm)
 
-        print('FWHM used for source detection: %.2f pixels'%fwhm)
+        if print_info: print('FWHM used for source detection: %.2f pixels'%fwhm)
 
         if method in methods_dict.keys():
-            print('No initial table provided. Using %s for source detection.'%methods_dict[method])
+            if print_info: print('No initial table provided. Using %s for source detection.'%methods_dict[method])
         threshold_method =  (sky_std * sky_threshold)
-        print('- %s threshold: %.2f'%(methods_dict[method], threshold_method))
-        print('Detecting sources...')
-        print(' - Using mask for known sources: %s'%('Yes' if mask is not None else 'No'))
+        if print_info:
+            print('- %s threshold: %.2f'%(methods_dict[method], threshold_method))
+            print('Detecting sources...')
+            print(' - Using mask for known sources: %s'%('Yes' if mask is not None else 'No'))
         # Source detection
         if method == 'IRAF':
             iraf_finder = IRAFStarFinder(threshold=threshold_method, fwhm=fwhm, peakmax=60000)
             iraf_stars = iraf_finder(data_sub, mask=mask)
             iraf_stars.remove_rows(np.where(iraf_stars['peak'] > 60000)) 
-            print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
+            if print_info: print('- Stars found by IRAFStarFinder: %d'%len(iraf_stars))
             # sorting list of found stars
             iraf_stars.sort('flux', reverse = True)
             iraf_stars['flux_id'] = 0
@@ -846,14 +850,15 @@ def detect_sources(filename,
                                     box_size=int(fwhm),
                                     wcs = WCS(header),
                                     mask=mask)
-            print('- Sources found by find_peaks: %d'%len(fp_sources)) # type: ignore
+            if print_info: print('- Sources found by find_peaks: %d'%len(fp_sources)) # type: ignore
             fp_sources.remove_rows(np.where(fp_sources['peak_value'] > 60000)) # type: ignore
             detect_table = fp_sources
             xlab, ylab = 'x_peak', 'y_peak'
 
         else:
-            print('\nNo method for source detection provided.')
-            print(' - Available methods: "IRAF" and "find_peaks".')
+            if print_info:
+                print('\nNo method for source detection provided.')
+                print(' - Available methods: "IRAF" and "find_peaks".')
             detect_table = Table({'x': [], 'y': []}, dtype=[float, float])
         
     else: 
@@ -877,7 +882,7 @@ def detect_sources(filename,
         else:
             init_px = skycoord_to_pixel(SkyCoord(init_table['ra'], init_table['dec'], unit = 'deg'), wcs)
             init_table = Table({'x':init_px[0], 'y': init_px[1]})
-        print('Initial table provided. Skipping source detection on the image.')
+        if print_info: print('Initial table provided. Skipping source detection on the image.')
         xlab, ylab = 'x', 'y'
         detect_table = init_table
 
