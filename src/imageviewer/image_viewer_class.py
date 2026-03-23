@@ -1157,6 +1157,67 @@ class image_viewer:
 
         return ax
 
+    def plot_classified_image(self, path, src_df,
+                              show=('star', 'known_SSO', 'candidate'),
+                              label_style=None,
+                              title=None,
+                              figsize=(8, 8),
+                              stretch='linear',
+                              percentile=99):
+        """
+        Display a FITS image with classified sources overlaid as scatter points.
+
+        Parameters
+        ----------
+        path : str
+            Full path to the FITS file.
+        src_df : pd.DataFrame
+            Must contain columns ``ra_fit``, ``dec_fit``, ``label``.
+        show : tuple of str
+            Subset of label values to overlay (default: all three standard labels).
+        label_style : dict, optional
+            ``{label: dict_of_scatter_kwargs}`` for each label.
+            Defaults to blue circles (star), orange stars (known_SSO), red triangles (candidate).
+        title : str, optional
+            Axes title. If None, no title is set.
+        figsize : tuple
+        stretch : str
+            Passed to ``view_image`` (e.g. ``'linear'``, ``'log'``).
+        percentile : float
+            Upper percentile for colour stretch.
+        """
+        _default_style = {
+            'star':      dict(s=10, color='dodgerblue', alpha=0.7, marker='o', linewidths=0),
+            'known_SSO': dict(s=40, color='orange',     alpha=0.9, marker='*', linewidths=0),
+            'candidate': dict(s=40, color='red',        alpha=0.9, marker='^', linewidths=0),
+        }
+        if label_style is not None:
+            _default_style.update(label_style)
+
+        fig, ax = self.view_image(
+            path,
+            figsize         = figsize,
+            manipulation_kw = {'zoom': False, 'stretch': stretch,
+                               'percentile': percentile,
+                               'vminmax': (None, None), 'rotate': False},
+            return_fig      = True,
+        )
+
+        tr = ax.get_transform('icrs')
+        for lbl in show:
+            sub = src_df[src_df['label'] == lbl]
+            if len(sub) == 0:
+                continue
+            style = _default_style.get(lbl, dict(s=20, color='white', alpha=0.8, marker='o'))
+            ax.scatter(sub['ra_fit'].values, sub['dec_fit'].values,
+                       transform=tr, label=f'{lbl} ({len(sub)})', **style)
+
+        leg = ax.legend(loc='upper right', fontsize=8, framealpha=0.9)
+        leg.set_zorder(10)
+        if title is not None:
+            ax.set_title(title, fontsize=9)
+        plt.show()
+
     def read_data(self, image, header = False, iloc = False):
         """Method to view images."""
         image_str, image_int = self.return_index(image, iloc = iloc) # type: ignore
