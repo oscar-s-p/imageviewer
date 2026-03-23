@@ -368,6 +368,10 @@ def cross_match_radec(df_ref, df_cat,
     
     df_matched = df_cat.iloc[idx].reset_index(drop=True).add_suffix(suffix_cat)
     df_matched['sep_arcsec' + suffix_cat] = sep.arcsec
+    # Cast bool columns to object so they can hold NaN for non-matched rows
+    bool_cols = df_matched.select_dtypes(include='bool').columns
+    if len(bool_cols) > 0:
+        df_matched[bool_cols] = df_matched[bool_cols].astype(object)
     df_matched[~matched_mask] = np.nan  # zero out non-matches
     
     return pd.concat([df_ref.reset_index(drop=True), df_matched], axis=1)
