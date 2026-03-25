@@ -45,6 +45,7 @@ def photo_analysis(filename,
                    plot = True, n_fig_init = 0,
                    stacked = False,
                    print_info = True,
+                   print_nothing = False,
                    ):
     n_fig = n_fig_init
     sky = {'mean':[], 'std':[]}
@@ -71,8 +72,9 @@ def photo_analysis(filename,
     if fil=='SDSSzs':
         fil = 'SDSSz'
     
-    print('\n-----------------------------------------------------------')
-    print('Photometric analysis of image %s'%(filename))
+    if print_info:
+        print('\n-----------------------------------------------------------')
+        print('Photometric analysis of image %s'%(filename))
 
     # Background estimation and substraction
     if print_info: print('Removing sky background...')
@@ -291,9 +293,10 @@ def photo_analysis(filename,
         if print_info: print('- ZP in header: %.3f, EZP: %.2e'%(header['ZP'], header['EZP']))
     if print_info: print('Number of stars used: %i'%len(calib))
     else: 
-        print(' - Using %i catalogued stars'%len(cat_table))
-        print('   Matched stars: %i'%len(calib))
-        print('   ZP = %.3f, rms = %.2e'%(ZP_mean, ZP_std))
+        if print_nothing == False:
+            print(' - Using %i catalogued stars'%len(cat_table))
+            print('   Matched stars: %i'%len(calib))
+            print('   ZP = %.3f, rms = %.2e'%(ZP_mean, ZP_std))
 
 
     # Calculate calibrated magnitudes

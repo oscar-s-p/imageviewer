@@ -877,9 +877,9 @@ class image_viewer:
         # obtaining central px coordinates
         x_shape = data.shape[1]
         y_shape = data.shape[0]
-        if centered == True:
+        if type(centered) == bool:
             center_px = (x_shape//2, y_shape//2)
-        if type(centered)==tuple:
+        if type(centered)==tuple or type(centered) == list:
             if type(centered[0]) == int: # input in px units
                 center_px = tuple(centered)
             elif type(centered[0]) == str: # input in str to be converted to deg
