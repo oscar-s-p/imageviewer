@@ -886,7 +886,7 @@ class image_viewer:
                 center_angle = SkyCoord(centered[0], centered[1], frame = 'icrs')
                 center_px = skycoord_to_pixel(center_angle, wcs, origin=0)
             else:
-                center_angle = SkyCoord(centered[0], centered[1], frame = 'icrs')
+                center_angle = SkyCoord(centered[0], centered[1], frame = 'icrs', unit = 'deg')
                 center_px = skycoord_to_pixel(center_angle, wcs, origin=0)
         
         # setting zoom
